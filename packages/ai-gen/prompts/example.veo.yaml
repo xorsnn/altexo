@@ -1,0 +1,11 @@
+project: _examples
+slug: example-brick-pan
+model: veo
+aspect: "16:9"
+seconds: 8
+audio: true
+prompt: |
+  Slow cinematic push-in across a single generic plastic toy brick figure
+  on a clean white studio backdrop. Soft volumetric key light, gentle dust
+  motes drifting through the beam, shallow depth of field. Brand-neutral
+  generic plastic brick styling. No logos, no text.

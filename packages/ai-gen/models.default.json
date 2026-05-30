@@ -1,0 +1,52 @@
+{
+  "_comment": "Default model registry + pricing for tools/ai-gen. This is DATA, not code — src/models.js loads it. Override entries without editing source by pointing AI_GEN_MODELS_CONFIG at a JSON file (per-model shallow replace). JSON has no comments; use `note` string fields. Pricing keys are strings (\"5\", \"1K\") — priceVideo/priceImage read them via bracket access, which coerces numeric indices to the matching string key.",
+  "nano-banana": {
+    "vendor": "gemini",
+    "id": "gemini-3-pro-image-preview",
+    "kind": "image",
+    "pricing": { "1K": 0.134, "2K": 0.134, "4K": 0.24 },
+    "defaultRes": "2K",
+    "note": "Nano Banana Pro. 1K corrected from 0.039 to 0.134 (the 0.039 was a copy-paste of the Flash per-image price; Google bills 1K and 2K together)."
+  },
+  "nano-banana-flash": {
+    "vendor": "gemini",
+    "id": "gemini-2.5-flash-image",
+    "kind": "image",
+    "pricing": { "perImage": 0.039 }
+  },
+  "veo": {
+    "vendor": "gemini",
+    "id": "veo-3.1-generate-preview",
+    "kind": "video",
+    "pricing": { "perSecond": 0.40 }
+  },
+  "veo-fast": {
+    "vendor": "gemini",
+    "id": "veo-3.1-fast-generate-preview",
+    "kind": "video",
+    "pricing": { "perSecond": 0.15 },
+    "note": "perSecond 0.15 is the audio-ON rate, which is correct for this codepath: src/veo.js generates audio by default. Audio-off Fast is ~0.10-0.12/s."
+  },
+  "kling-master": {
+    "vendor": "kling",
+    "id": "kling-v3-master",
+    "kind": "video",
+    "pricing": { "5": 0.70, "10": 1.40 },
+    "note": "Master tier omits the `mode` request param. id kling-v3-master is a best-guess — verify in the Kling dev console (https://app.klingai.com/global/dev) if you get `invalid model_name`."
+  },
+  "kling-pro": {
+    "vendor": "kling",
+    "id": "kling-v3",
+    "mode": "pro",
+    "kind": "video",
+    "pricing": { "5": 0.42, "10": 0.84 },
+    "note": "kling-v3 verified working 2026-05-10 via image-to-video Pro mode. `mode` is sent as a request param for non-master models."
+  },
+  "kling-std": {
+    "vendor": "kling",
+    "id": "kling-v3",
+    "mode": "std",
+    "kind": "video",
+    "pricing": { "5": 0.21, "10": 0.42 }
+  }
+}

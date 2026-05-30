@@ -1,0 +1,17 @@
+project: _examples
+slug: example-pipeline
+aspect: "9:16"
+
+image:
+  model: nano-banana
+  prompt: |
+    Wide cinematic establishing shot of a single generic plastic toy brick
+    figure standing beside a tall brick tower, dawn light, hyper-real macro
+    detail. Brand-neutral generic plastic brick styling. No logos, no text.
+
+video:
+  model: veo
+  seconds: 8
+  prompt: |
+    Slow camera push-in toward the figure as morning fog drifts past.
+    Subtle animation of drifting dust. Cinematic colour grade.

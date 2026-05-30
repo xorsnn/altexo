@@ -1,0 +1,9 @@
+project: _smoketest
+slug: smoketest-flash
+model: nano-banana-flash
+aspect: "1:1"
+count: 1
+prompt: |
+  A single hero brick figure on a clean white studio backdrop.
+  Soft top-down key light, subtle rim light, shallow depth of field.
+  Brand-neutral generic plastic brick styling. No logos, no text.

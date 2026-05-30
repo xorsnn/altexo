@@ -1,0 +1,10 @@
+project: _examples
+slug: example-brick-orbit
+model: kling-pro
+aspect: "9:16"
+seconds: 5
+negative_prompt: blur, distortion, text, watermark
+prompt: |
+  A generic plastic toy brick vehicle drives across a clean reflective floor
+  while the camera orbits smoothly around it. Crisp studio lighting, soft
+  reflections, brand-neutral generic plastic brick styling. No logos, no text.

@@ -1,0 +1,54 @@
+{
+  "name": "@altexo/ai-gen",
+  "version": "0.1.0",
+  "description": "Direct-API CLI + library for AI image/video generation (Nano Banana Pro, Veo 3.1, Kling 3). A cheaper, reproducible alternative to aggregators for repeated templates.",
+  "license": "MIT",
+  "author": "Sergei Grigorev",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "ai",
+    "image-generation",
+    "video-generation",
+    "gemini",
+    "nano-banana",
+    "veo",
+    "kling",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xorsnn/altexo.git",
+    "directory": "packages/ai-gen"
+  },
+  "homepage": "https://github.com/xorsnn/altexo/tree/main/packages/ai-gen#readme",
+  "bugs": {
+    "url": "https://github.com/xorsnn/altexo/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src",
+    "scripts",
+    "prompts",
+    "models.default.json",
+    "README.md",
+    ".env.example"
+  ],
+  "scripts": {
+    "image": "node scripts/gen-image.js",
+    "veo": "node scripts/gen-veo.js",
+    "kling": "node scripts/gen-kling.js",
+    "pipeline": "node scripts/gen-pipeline.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "jsonwebtoken": "^9.0.2",
+    "yaml": "^2.6.0"
+  }
+}
