@@ -127,28 +127,57 @@ async function runInit(flags) {
   console.log('altexo-ai-gen init — set up your API keys.\n');
   console.log(`This writes ${ENV_TARGET}\n(${INSTALLED ? 'installed mode: caller cwd' : 'clone mode: package-local'}).\n`);
 
-  // ONE readline interface for the whole flow. A fresh interface per question
-  // breaks on piped (non-TTY) stdin — the first one consumes the stream and the
-  // rest hit EOF before their callbacks fire (so nothing gets written). A single
-  // shared interface reads sequentially for both a TTY and piped input.
+  // Buffer stdin by line. `rl.question` on a *piped* stream loses lines that
+  // arrive before each handler attaches — small piped inputs deliver every line
+  // in one chunk, so the 2nd/3rd questions never see their line, hang, and the
+  // process exits before the .env is written. A 'line'-event queue captures
+  // every line regardless of timing and works for a TTY too. `muted` suppresses
+  // the echo of secrets when stdin is an interactive terminal.
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   let muted = false;
   rl._writeToOutput = (str) => {
     if (!muted) rl.output.write(str);
   };
-  const ask = (query) =>
-    new Promise((res) => rl.question(query, (a) => res((a || '').trim())));
-  // Visible prompt, hidden answer (the prompt is printed, then echo is muted).
-  const askHidden = (query) =>
+  const lineBuf = [];
+  let lineWaiter = null;
+  let inputEnded = false;
+  rl.on('line', (line) => {
+    if (lineWaiter) {
+      const w = lineWaiter;
+      lineWaiter = null;
+      w(line);
+    } else {
+      lineBuf.push(line);
+    }
+  });
+  rl.on('close', () => {
+    inputEnded = true;
+    if (lineWaiter) {
+      const w = lineWaiter;
+      lineWaiter = null;
+      w(null);
+    }
+  });
+  const nextLine = () =>
     new Promise((res) => {
-      process.stdout.write(query);
-      muted = true;
-      rl.question('', (a) => {
-        muted = false;
-        process.stdout.write('\n');
-        res((a || '').trim());
-      });
+      if (lineBuf.length) return res(lineBuf.shift());
+      if (inputEnded) return res(null);
+      lineWaiter = res;
     });
+  const ask = async (query) => {
+    muted = false;
+    process.stdout.write(query);
+    return ((await nextLine()) || '').trim();
+  };
+  // Visible prompt, hidden answer (echo muted while typing on a TTY).
+  const askHidden = async (query) => {
+    process.stdout.write(query);
+    muted = true;
+    const line = await nextLine();
+    muted = false;
+    process.stdout.write('\n');
+    return (line || '').trim();
+  };
 
   if (existsSync(ENV_TARGET) && !force) {
     const ans = await ask(`A .env already exists at ${ENV_TARGET}. Overwrite? (y/N) `);
