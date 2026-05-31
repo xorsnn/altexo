@@ -127,9 +127,33 @@ async function runInit(flags) {
   console.log('altexo-ai-gen init — set up your API keys.\n');
   console.log(`This writes ${ENV_TARGET}\n(${INSTALLED ? 'installed mode: caller cwd' : 'clone mode: package-local'}).\n`);
 
+  // ONE readline interface for the whole flow. A fresh interface per question
+  // breaks on piped (non-TTY) stdin — the first one consumes the stream and the
+  // rest hit EOF before their callbacks fire (so nothing gets written). A single
+  // shared interface reads sequentially for both a TTY and piped input.
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  let muted = false;
+  rl._writeToOutput = (str) => {
+    if (!muted) rl.output.write(str);
+  };
+  const ask = (query) =>
+    new Promise((res) => rl.question(query, (a) => res((a || '').trim())));
+  // Visible prompt, hidden answer (the prompt is printed, then echo is muted).
+  const askHidden = (query) =>
+    new Promise((res) => {
+      process.stdout.write(query);
+      muted = true;
+      rl.question('', (a) => {
+        muted = false;
+        process.stdout.write('\n');
+        res((a || '').trim());
+      });
+    });
+
   if (existsSync(ENV_TARGET) && !force) {
     const ans = await ask(`A .env already exists at ${ENV_TARGET}. Overwrite? (y/N) `);
     if (!isYes(ans)) {
+      rl.close();
       console.log('Kept the existing .env. Nothing changed.');
       return;
     }
@@ -137,6 +161,7 @@ async function runInit(flags) {
 
   const gemini = await askHidden('Gemini API key (https://aistudio.google.com/apikey): ');
   if (!gemini) {
+    rl.close();
     console.error('A Gemini API key is required. Aborting — nothing written.');
     process.exit(1);
   }
@@ -162,6 +187,7 @@ async function runInit(flags) {
     const ans = await ask('\nRun a smoke test now? Makes one ~$0.04 image call. (y/N) ');
     doSmoke = isYes(ans);
   }
+  rl.close();
   if (doSmoke) {
     console.log('\nRunning smoke test (Nano Banana Flash)...\n');
     runScript(smokeArgs()); // exits with the child status
@@ -187,32 +213,4 @@ function renderEnv({ gemini, klingAccess, klingSecret }) {
 
 function isYes(s) {
   return /^y(es)?$/i.test((s || '').trim());
-}
-
-function ask(query) {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((res) =>
-    rl.question(query, (a) => {
-      rl.close();
-      res((a || '').trim());
-    })
-  );
-}
-
-// Like ask(), but doesn't echo what's typed (for secrets). The prompt itself is
-// written before muting; on submit we emit a newline so the terminal advances.
-function askHidden(query) {
-  return new Promise((resolve) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    let muted = false;
-    rl._writeToOutput = (str) => {
-      if (!muted) rl.output.write(str);
-    };
-    rl.question(query, (a) => {
-      rl.output.write('\n');
-      rl.close();
-      resolve((a || '').trim());
-    });
-    muted = true;
-  });
 }
