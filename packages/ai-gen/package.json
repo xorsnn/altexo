@@ -1,10 +1,13 @@
 {
   "name": "@altexo/ai-gen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Direct-API CLI + library for AI image/video generation (Nano Banana Pro, Veo 3.1, Kling 3). A cheaper, reproducible alternative to aggregators for repeated templates.",
   "license": "MIT",
   "author": "Sergei Grigorev",
   "type": "module",
+  "bin": {
+    "altexo-ai-gen": "bin/altexo-ai-gen.js"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -31,6 +34,7 @@
     "access": "public"
   },
   "files": [
+    "bin",
     "src",
     "scripts",
     "prompts",
