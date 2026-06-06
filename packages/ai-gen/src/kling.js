@@ -46,6 +46,7 @@ export async function generateVideo({
   imageTailPath = null,
   model = 'kling-master',
   negativePrompt,
+  audio = false,
 }) {
   const m = MODELS[model];
   if (!m || m.vendor !== 'kling') throw new Error(`Unknown Kling model: ${model}`);
@@ -65,6 +66,12 @@ export async function generateVideo({
   };
   if (m.mode) payload.mode = m.mode;
   if (negativePrompt) payload.negative_prompt = negativePrompt;
+  // Native audio (synced SFX / ambient). The OFFICIAL Kling API field is `sound`
+  // (string "on"/"off"), NOT the `enable_audio` boolean used by third-party
+  // wrappers. Image-to-video audio needs PRO mode and a single start frame (it is
+  // unavailable with an end frame); billed at a multiplier (see
+  // models.default.json `audioMultiplier`).
+  if (audio) payload.sound = 'on';
   if (isImage) {
     const data = await readFile(imagePath);
     payload.image = data.toString('base64');

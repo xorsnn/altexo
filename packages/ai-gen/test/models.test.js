@@ -12,7 +12,7 @@ const approx = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} !~=
 
 test('registry exposes the expected aliases with id/vendor/kind', () => {
   for (const alias of [
-    'nano-banana', 'nano-banana-flash', 'veo', 'veo-fast',
+    'nano-banana', 'nano-banana-flash', 'gpt-image-1', 'veo', 'veo-fast',
     'kling-master', 'kling-pro', 'kling-std',
   ]) {
     const m = MODELS[alias];
@@ -33,6 +33,14 @@ test('image pricing — incl. the corrected Nano Banana Pro 1K rate', () => {
   assert.equal(priceImage('nano-banana'), 0.134);       // defaults to 2K
   assert.equal(priceImage('nano-banana', '4K'), 0.24);
   assert.equal(priceImage('nano-banana-flash'), 0.039); // perImage path, resolution-agnostic
+  assert.equal(priceImage('gpt-image-1'), 0.25);        // OpenAI engine, perImage path
+  assert.equal(MODELS['gpt-image-1'].vendor, 'openai');
+});
+
+test('kling-pro carries a 2x native-audio multiplier', () => {
+  assert.equal(MODELS['kling-pro'].audioMultiplier, 2);
+  // The CLIs / consumers bill audio as priceVideo * audioMultiplier.
+  assert.equal(priceVideo('kling-pro', 5) * MODELS['kling-pro'].audioMultiplier, 0.84);
 });
 
 test('video pricing — perSecond models and per-duration tables', () => {
