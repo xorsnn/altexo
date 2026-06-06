@@ -4,6 +4,16 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-06-06
+
+### Fixed
+
+- **Kling clip-length validation.** `generateVideo()` now rejects any Kling
+  `duration` other than 5 or 10 seconds with a clear error, thrown synchronously
+  before any token/network work (Kling renders only those two lengths). Previously
+  an out-of-range duration was forwarded to the Kling API, which rejected it, and
+  priced to `$0` because the pricing table is keyed to `5`/`10`.
+
 ## [0.3.0] - 2026-06-06
 
 ### Added
