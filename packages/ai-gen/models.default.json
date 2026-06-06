@@ -38,24 +38,27 @@
     "vendor": "kling",
     "id": "kling-v3-master",
     "kind": "video",
-    "pricing": { "5": 0.70, "10": 1.40 },
-    "note": "Master tier omits the `mode` request param. id kling-v3-master is a best-guess — verify in the Kling dev console (https://app.klingai.com/global/dev) if you get `invalid model_name`. Native audio requires pro mode — use kling-pro for sound."
+    "pricing": { "perSecond": 0.14 },
+    "durations": [5, 10],
+    "note": "UNVERIFIED: the official Kling 3.0 model map shows no `kling-v3-master` tier (std/pro/4k only). This id is a best-guess and may be a legacy v2 Master (5/10s) or invalid (`invalid model_name`). Kept at the legacy 5/10 durations; perSecond 0.14 reproduces the prior 5s=$0.70 / 10s=$1.40 points. Master omits the `mode` param. Audio requires pro mode — use kling-pro for sound."
   },
   "kling-pro": {
     "vendor": "kling",
     "id": "kling-v3",
     "mode": "pro",
     "kind": "video",
-    "pricing": { "5": 0.42, "10": 0.84 },
+    "pricing": { "perSecond": 0.084 },
+    "durations": [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
     "audioMultiplier": 2,
-    "note": "kling-v3 (Kling 3.0) Pro. `mode` is sent as a request param for non-master models. Native audio via `audio: true` → the official `sound: \"on\"` param; requires a single start frame (no image_tail — audio is unavailable with an end frame). Audio billed at audioMultiplier (2x)."
+    "note": "kling-v3 (Kling 3.0) Pro. Duration is the integer range 3-15s (default 5) — verified against the official Kling model map + fal.ai/Replicate/Segmind v3 schemas. perSecond 0.084 derived from the prior 5s=$0.42 / 10s=$0.84 points (linear) — verify the live Kling 3.0 rate. `mode` is sent as a request param for non-master models. Native audio via `audio: true` → the official `sound: \"on\"` param; requires a single start frame (no image_tail). Audio billed at audioMultiplier (2x)."
   },
   "kling-std": {
     "vendor": "kling",
     "id": "kling-v3",
     "mode": "std",
     "kind": "video",
-    "pricing": { "5": 0.21, "10": 0.42 },
-    "note": "Std mode is video-only (no native audio). Use kling-pro for sound."
+    "pricing": { "perSecond": 0.042 },
+    "durations": [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    "note": "kling-v3 (Kling 3.0) Std. Duration 3-15s (default 5). perSecond 0.042 derived from the prior 5s=$0.21 / 10s=$0.42 points — verify the live rate. Std is video-only (no native audio). Use kling-pro for sound."
   }
 }
