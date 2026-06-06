@@ -4,6 +4,20 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] - 2026-06-06
+
+### Fixed
+
+- **Kling v3 clip length corrected to 3–15s.** 0.3.1 capped Kling at 5/10s, which is
+  the Kling 2.x rule; Kling 3.0 (`kling-v3`, launched 2026-02-04) generates an integer
+  range of **3–15 seconds**. The `kling.js` duration guard is now **data-driven** — it
+  reads each model's `durations` array from `models.default.json` instead of a hardcoded
+  `[5,10]`. `kling-pro` / `kling-std` carry `durations` 3..15; `kling-master` stays 5/10
+  and is flagged unverified (the official v3 map shows no master tier).
+- **Kling pricing switched to per-second** (pro `$0.084/s`, std `$0.042/s`, master
+  `$0.14/s`), derived from the prior linear 5/10s points, so any 3–15s clip prices
+  correctly instead of resolving to `$0`. Verify against the live Kling 3.0 rate.
+
 ## [0.3.1] - 2026-06-06
 
 ### Fixed

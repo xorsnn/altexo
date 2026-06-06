@@ -40,22 +40,33 @@ test('image pricing — incl. the corrected Nano Banana Pro 1K rate', () => {
 test('kling-pro carries a 2x native-audio multiplier', () => {
   assert.equal(MODELS['kling-pro'].audioMultiplier, 2);
   // The CLIs / consumers bill audio as priceVideo * audioMultiplier.
-  assert.equal(priceVideo('kling-pro', 5) * MODELS['kling-pro'].audioMultiplier, 0.84);
+  approx(priceVideo('kling-pro', 5) * MODELS['kling-pro'].audioMultiplier, 0.84);
 });
 
-test('video pricing — perSecond models and per-duration tables', () => {
-  approx(priceVideo('veo', 8), 3.2);        // 0.40/s
-  approx(priceVideo('veo-fast', 8), 1.2);   // 0.15/s (audio-on basis, see note)
-  assert.equal(priceVideo('kling-pro', 5), 0.42);
-  assert.equal(priceVideo('kling-pro', 10), 0.84);
-  assert.equal(priceVideo('kling-master', 5), 0.70);
-  assert.equal(priceVideo('kling-std', 5), 0.21);
+test('Kling 3 exposes the 3-15s duration set; legacy master stays 5/10', () => {
+  const v3 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+  assert.deepEqual(MODELS['kling-pro'].durations, v3);
+  assert.deepEqual(MODELS['kling-std'].durations, v3);
+  assert.deepEqual(MODELS['kling-master'].durations, [5, 10]);
 });
 
-test('unknown model or duration prices to null (no silent zero)', () => {
+test('video pricing — all video models bill per-second (Kling 3 over 3-15s)', () => {
+  approx(priceVideo('veo', 8), 3.2);          // 0.40/s
+  approx(priceVideo('veo-fast', 8), 1.2);     // 0.15/s (audio-on basis, see note)
+  approx(priceVideo('kling-pro', 5), 0.42);   // 0.084/s — matches the legacy 5s point
+  approx(priceVideo('kling-pro', 10), 0.84);  // ...and the legacy 10s point
+  approx(priceVideo('kling-pro', 7), 0.588);  // any 3-15s length now prices linearly
+  approx(priceVideo('kling-pro', 15), 1.26);
+  approx(priceVideo('kling-master', 5), 0.70);
+  approx(priceVideo('kling-std', 5), 0.21);
+});
+
+test('unknown model prices to null (no silent zero)', () => {
   assert.equal(priceImage('does-not-exist'), null);
   assert.equal(priceVideo('does-not-exist', 5), null);
-  assert.equal(priceVideo('kling-pro', 7), null); // 7s not in the table
+  // Video models are all per-second now, so any numeric duration resolves to a
+  // price; only an unknown model yields null. (Duration validity is enforced by
+  // each model's `durations` set in the generator, not by pricing.)
 });
 
 test('AI_GEN_MODELS_CONFIG override does per-model shallow replace', async () => {

@@ -8,9 +8,6 @@ const BASE_URL = 'https://api.klingai.com';
 const POLL_MS = 8_000;
 const MAX_WAIT_MS = 10 * 60 * 1000;
 const TOKEN_TTL_SEC = 1800;
-// Kling renders only these clip lengths (seconds). The pricing tables in
-// models.default.json are keyed to the same set.
-const KLING_DURATIONS = [5, 10];
 
 function makeToken() {
   const accessKey = requireEnv('KLING_ACCESS_KEY');
@@ -53,8 +50,10 @@ export async function generateVideo({
 }) {
   const m = MODELS[model];
   if (!m || m.vendor !== 'kling') throw new Error(`Unknown Kling model: ${model}`);
-  if (!KLING_DURATIONS.includes(Number(duration))) {
-    throw new Error(`Kling supports only 5- or 10-second clips (got ${duration}s).`);
+  // Allowed clip lengths are data-driven per model (models.default.json `durations`):
+  // Kling 3.0 std/pro accept the integer range 3-15s; legacy tiers only 5/10.
+  if (Array.isArray(m.durations) && !m.durations.includes(Number(duration))) {
+    throw new Error(`Kling model ${model} supports durations ${m.durations.join('/')}s (got ${duration}s).`);
   }
   const isImage = !!imagePath;
   const isHeadTail = !!imageTailPath;

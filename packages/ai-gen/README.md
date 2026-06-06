@@ -105,15 +105,18 @@ Native API list prices, from `models.default.json`:
 | gpt-image-1 (high)  | image (2:3)   | ~$0.25     |
 | Veo 3.1 (8s)        | video + audio | $3.20      |
 | Veo 3.1 Fast (8s)   | video + audio | $1.20      |
-| Kling 3 Master (5s) | video         | $0.70      |
-| Kling 3 Pro (5s)    | video         | $0.42      |
-| Kling 3 Pro + audio | video + audio | $0.84      |
-| Kling 3 Std (5s)    | video         | $0.21      |
+| Kling 3 Master      | video         | ~$0.14/s   |
+| Kling 3 Pro         | video         | ~$0.084/s  |
+| Kling 3 Std         | video         | ~$0.042/s  |
 
 Aggregators that resell these models typically mark them up ~1.5–3× (and often
 gate them behind a subscription), which is the whole reason this calls the native
 APIs directly. Each run's `manifest.json` records the cost estimate. Prices
 approximate as of mid-2026 — verify against the providers' current pricing.
+
+Kling 3 bills **per second** over a 3–15s clip (e.g. kling-pro: 5s ≈ $0.42, 10s ≈ $0.84,
+15s ≈ $1.26); the per-second rates are derived from the legacy 5/10s points. `kling-pro`
+with `audio: true` doubles (2× `audioMultiplier`).
 
 ## Model notes
 
@@ -145,7 +148,10 @@ approximate as of mid-2026 — verify against the providers' current pricing.
   [Kling dev console](https://app.klingai.com/global/dev), trigger a working
   request, and copy the exact `model_name` from the Network tab into your
   `AI_GEN_MODELS_CONFIG` override.
-- Length 5/10s. `image_input:` is base64-encoded into the request (no upload step).
+- Length: Kling 3 (pro/std) is the integer range **3–15s** (default 5); legacy tiers were
+  5/10. Allowed values are data-driven per model (`models.default.json` `durations`); the
+  wrapper rejects an out-of-range length. `image_input:` is base64-encoded into the request
+  (no upload step).
 - Native audio on **kling-pro**: set `audio: true` for synced SFX / ambient — the
   wrapper sends the official Kling `sound: "on"` field. Pro tier only, single start
   frame only (not with `image_tail`), billed at the model's `audioMultiplier` (~2×).
