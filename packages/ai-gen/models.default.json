@@ -1,5 +1,5 @@
 {
-  "_comment": "Default model registry + pricing for tools/ai-gen. This is DATA, not code — src/models.js loads it. Override entries without editing source by pointing AI_GEN_MODELS_CONFIG at a JSON file (per-model shallow replace). JSON has no comments; use `note` string fields. Pricing keys are strings (\"5\", \"1K\") — priceVideo/priceImage read them via bracket access, which coerces numeric indices to the matching string key.",
+  "_comment": "Default model registry + pricing for @altexo/ai-gen. This is DATA, not code — src/models.js loads it. Override entries without editing source by pointing AI_GEN_MODELS_CONFIG at a JSON file (per-model shallow replace). JSON has no comments; use `note` string fields. Pricing keys are strings (\"5\", \"1K\") — priceVideo/priceImage read them via bracket access, which coerces numeric indices to the matching string key.",
   "nano-banana": {
     "vendor": "gemini",
     "id": "gemini-3-pro-image-preview",
@@ -13,6 +13,13 @@
     "id": "gemini-2.5-flash-image",
     "kind": "image",
     "pricing": { "perImage": 0.039 }
+  },
+  "gpt-image-1": {
+    "vendor": "openai",
+    "id": "gpt-image-1",
+    "kind": "image",
+    "pricing": { "perImage": 0.25 },
+    "note": "OpenAI gpt-image-1 (DALL·E successor), via scripts/gen-openai.js. Needs OPENAI_API_KEY. No true 9:16 — the nearest vertical is 1024x1536 (2:3); the manifest records the actual pixel size. perImage ~0.25 at quality:high — verify the current OpenAI rate; cost is quality/size-dependent."
   },
   "veo": {
     "vendor": "gemini",
@@ -32,7 +39,7 @@
     "id": "kling-v3-master",
     "kind": "video",
     "pricing": { "5": 0.70, "10": 1.40 },
-    "note": "Master tier omits the `mode` request param. id kling-v3-master is a best-guess — verify in the Kling dev console (https://app.klingai.com/global/dev) if you get `invalid model_name`."
+    "note": "Master tier omits the `mode` request param. id kling-v3-master is a best-guess — verify in the Kling dev console (https://app.klingai.com/global/dev) if you get `invalid model_name`. Native audio requires pro mode — use kling-pro for sound."
   },
   "kling-pro": {
     "vendor": "kling",
@@ -40,13 +47,15 @@
     "mode": "pro",
     "kind": "video",
     "pricing": { "5": 0.42, "10": 0.84 },
-    "note": "kling-v3 verified working 2026-05-10 via image-to-video Pro mode. `mode` is sent as a request param for non-master models."
+    "audioMultiplier": 2,
+    "note": "kling-v3 (Kling 3.0) Pro. `mode` is sent as a request param for non-master models. Native audio via `audio: true` → the official `sound: \"on\"` param; requires a single start frame (no image_tail — audio is unavailable with an end frame). Audio billed at audioMultiplier (2x)."
   },
   "kling-std": {
     "vendor": "kling",
     "id": "kling-v3",
     "mode": "std",
     "kind": "video",
-    "pricing": { "5": 0.21, "10": 0.42 }
+    "pricing": { "5": 0.21, "10": 0.42 },
+    "note": "Std mode is video-only (no native audio). Use kling-pro for sound."
   }
 }

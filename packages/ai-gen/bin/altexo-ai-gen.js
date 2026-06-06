@@ -24,6 +24,7 @@ const ENV_TARGET = INSTALLED
 
 const SCRIPTS = {
   image: resolve(PKG_ROOT, 'scripts/gen-image.js'),
+  openai: resolve(PKG_ROOT, 'scripts/gen-openai.js'),
   veo: resolve(PKG_ROOT, 'scripts/gen-veo.js'),
   kling: resolve(PKG_ROOT, 'scripts/gen-kling.js'),
   pipeline: resolve(PKG_ROOT, 'scripts/gen-pipeline.js'),
@@ -39,13 +40,15 @@ Commands:
   init                 Guided API-key setup — writes a .env, optional smoke test
   smoke                Generate one cheap test image (Nano Banana Flash, ~$0.04)
   image <prompt.yaml>  Generate image(s)        (Nano Banana)
+  openai <prompt.yaml> Generate image           (OpenAI gpt-image-1)
   veo <prompt.yaml>    Generate video           (Veo 3.1)
   kling <prompt.yaml>  Generate video           (Kling 3)
   pipeline <p.yaml>    Image -> video pipeline
   --help, -h           Show this help
   --version, -v        Show version
 
-Keys: GEMINI_API_KEY (required), KLING_ACCESS_KEY + KLING_SECRET_KEY (optional).
+Keys: GEMINI_API_KEY (required), KLING_ACCESS_KEY + KLING_SECRET_KEY (Kling),
+OPENAI_API_KEY (gpt-image-1) — all optional except Gemini.
 Run \`altexo-ai-gen init\` to set them up, or see .env.example.
 
 First run:
@@ -203,12 +206,19 @@ async function runInit(flags) {
     klingSecret = await askHidden('Kling secret key: ');
   }
 
-  writeFileSync(ENV_TARGET, renderEnv({ gemini, klingAccess, klingSecret }));
+  let openai = '';
+  const wantOpenai = await ask('Add an OpenAI key now? (for gpt-image-1) (y/N) ');
+  if (isYes(wantOpenai)) {
+    openai = await askHidden('OpenAI API key (https://platform.openai.com/api-keys): ');
+  }
+
+  writeFileSync(ENV_TARGET, renderEnv({ gemini, klingAccess, klingSecret, openai }));
   // Make the keys available to a smoke test in this same process, regardless of
   // clone vs installed mode (don't print the values).
   process.env.GEMINI_API_KEY = gemini;
   if (klingAccess) process.env.KLING_ACCESS_KEY = klingAccess;
   if (klingSecret) process.env.KLING_SECRET_KEY = klingSecret;
+  if (openai) process.env.OPENAI_API_KEY = openai;
   console.log(`\nWrote ${ENV_TARGET} (keys not echoed).`);
 
   let doSmoke = forceSmoke;
@@ -225,7 +235,7 @@ async function runInit(flags) {
   }
 }
 
-function renderEnv({ gemini, klingAccess, klingSecret }) {
+function renderEnv({ gemini, klingAccess, klingSecret, openai }) {
   const lines = [
     '# Written by `altexo-ai-gen init`. Values in your shell environment override this file.',
     '',
@@ -235,6 +245,9 @@ function renderEnv({ gemini, klingAccess, klingSecret }) {
     '# Kling official API (api.klingai.com) — Kling 3 video.',
     `KLING_ACCESS_KEY=${klingAccess}`,
     `KLING_SECRET_KEY=${klingSecret}`,
+    '',
+    '# OpenAI — gpt-image-1 (image).',
+    `OPENAI_API_KEY=${openai ?? ''}`,
     '',
   ];
   return lines.join('\n');

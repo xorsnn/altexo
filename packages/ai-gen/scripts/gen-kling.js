@@ -25,10 +25,12 @@ const slug = yaml.slug || 'unnamed';
 const model = yaml.model || 'kling-master';
 const aspect = yaml.aspect || '9:16';
 const duration = yaml.seconds || 5;
+const audio = yaml.audio === true; // native Kling audio (SFX/ambient/speech); off by default
 const imagePath = yaml.image_input ? resolve(process.cwd(), yaml.image_input) : null;
 const imageTailPath = yaml.image_tail ? resolve(process.cwd(), yaml.image_tail) : null;
 
-const modeLabel = imageTailPath ? `${duration}s Kling head-tail video` : `${duration}s Kling video`;
+const audioLabel = audio ? ' + audio' : '';
+const modeLabel = imageTailPath ? `${duration}s Kling head-tail video${audioLabel}` : `${duration}s Kling video${audioLabel}`;
 console.log(`[${slug}] generating ${modeLabel} via ${MODELS[model].id}`);
 const t0 = Date.now();
 const { videoUrl } = await generateVideo({
@@ -39,13 +41,16 @@ const { videoUrl } = await generateVideo({
   imageTailPath,
   model,
   negativePrompt: yaml.negative_prompt,
+  audio,
 });
 const elapsed = Number(((Date.now() - t0) / 1000).toFixed(1));
 
 const outDir = await makeOutDir(project, slug, model);
 const saved = await saveVideo(videoUrl, outDir);
 
-const cost = priceVideo(model, duration) ?? 0;
+// Native audio is billed at a multiplier (pro-tier feature) — see models.default.json.
+const audioMultiplier = audio ? (MODELS[model].audioMultiplier ?? 2) : 1;
+const cost = (priceVideo(model, duration) ?? 0) * audioMultiplier;
 const manifest = {
   project,
   slug,
@@ -62,6 +67,7 @@ const manifest = {
     prompt: yaml.prompt,
     aspect,
     seconds: duration,
+    audio,
     imageInput: yaml.image_input || null,
     imageTail: yaml.image_tail || null,
     negativePrompt: yaml.negative_prompt || null,

@@ -21,12 +21,13 @@ count: 1                            # number of takes/images per call (paid per 
 references:                         # optional, up to 14 image paths (relative to cwd)
   - refs/hero-ref.png
 resolution: "2K"                   # 1K | 2K | 4K — used for cost reporting only
+quality: high                       # gpt-image-1 only (run via gen-openai.js): low | medium | high. Nano Banana ignores it. Note: gpt-image-1 has no true 9:16 — a 9:16 input maps to 1024x1536 (2:3).
 
 # Video-only
 seconds: 8                          # Veo: 4|6|8 — Kling: 5|10
 image_input: refs/hero.png         # animate this still (first frame) instead of pure text-to-video
 image_tail: refs/end.png           # optional — condition the LAST frame too. Requires image_input. Use for seamless loops (set image_tail == image_input) or for hard A->B transitions. Supported on Kling Pro (image_tail) and Veo 3.1 (lastFrame). Cost is the same as a regular image-conditioned generation.
-audio: true                         # Veo only — generate native audio (default true)
+audio: true                         # native audio. Veo: on by default (free). Kling: OFF by default — set true for synced SFX/ambient (sends the official `sound:"on"`). Needs a PRO model + single start frame (no image_tail): kling-pro. ~2x cost.
 resolution: "1080p"                # Veo only — 1080p (1080x1920 at 9:16) is default. REQUIRES seconds: 8. Use "720p" for 4s/6s clips.
 negative_prompt: blur, distort     # Kling only
 ```
@@ -79,8 +80,9 @@ video:
 | `aspect`     | `9:16` (all generators) | Override only for non-vertical output  |
 | `count`      | 1                | Each output costs separately               |
 | `seconds`    | 8 (Veo), 5 (Kling) | See model docs for valid values          |
-| `audio`      | true             | Veo only                                   |
+| `audio`      | true (Veo), false (Kling) | Veo on (free); Kling opt-in on kling-pro (~2×) |
 | `resolution` | `1080p`          | Veo only — `720p` also valid               |
+| `quality`    | `high`           | gpt-image-1 only (`gen-openai.js`)         |
 | `references` | none             | Up to 14 (Nano Banana Pro)                 |
 
 ## Output
