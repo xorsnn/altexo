@@ -18,3 +18,8 @@ export function requireEnv(name) {
   }
   return value;
 }
+
+export function optionalEnv(name, fallback = undefined) {
+  const value = process.env[name];
+  return value === undefined || value === '' ? fallback : value;
+}

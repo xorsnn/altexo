@@ -4,6 +4,25 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-06-07
+
+### Added
+
+- **Kling v3 multi-shot.** `generateVideo({ multiShot, shotType })` splits one clip into up
+  to 6 prompted segments (`multi_shot` / `shot_type` / `multi_prompt[{index,prompt,duration}]`
+  on `image2video`/`text2video`); the per-shot seconds sum to the clip length (3–15). YAML:
+  `multi_shot: [{ prompt, seconds }]` + `shot_type: customize|intelligence`. Verified on a
+  real 3-shot render.
+- **Kling v3 reference subjects (elements).** `createElement()` (new `src/kling-elements.js`,
+  the async `advanced-custom-elements` API) builds a reusable element from a frontal + 1–3
+  reference images; `generateVideo({ elementIds })` passes `element_list` and you reference
+  them in the prompt as `<<<element_1>>>`, … (max 3). YAML: `elements: [{name, description,
+  images}]` (inline create) or `element_ids: [...]`; new `scripts/gen-kling-element.js`
+  (`npm run element` / `altexo-ai-gen element <name> <imgs>`). Verified on a real render that
+  held a building's identity across a 10s crane.
+- `KLING_BASE_URL` env override (the international host moved to `api-singapore.klingai.com`;
+  `api.klingai.com` still resolves) and a shared `submitAndPoll()` task/poll helper.
+
 ## [0.3.2] - 2026-06-06
 
 ### Fixed
