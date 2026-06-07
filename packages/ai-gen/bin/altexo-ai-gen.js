@@ -28,6 +28,7 @@ const SCRIPTS = {
   veo: resolve(PKG_ROOT, 'scripts/gen-veo.js'),
   kling: resolve(PKG_ROOT, 'scripts/gen-kling.js'),
   pipeline: resolve(PKG_ROOT, 'scripts/gen-pipeline.js'),
+  element: resolve(PKG_ROOT, 'scripts/gen-kling-element.js'),
 };
 const SMOKE_PROMPT = resolve(PKG_ROOT, 'prompts/_smoketest.flash.yaml');
 
@@ -42,8 +43,9 @@ Commands:
   image <prompt.yaml>  Generate image(s)        (Nano Banana)
   openai <prompt.yaml> Generate image           (OpenAI gpt-image-1)
   veo <prompt.yaml>    Generate video           (Veo 3.1)
-  kling <prompt.yaml>  Generate video           (Kling 3)
+  kling <prompt.yaml>  Generate video           (Kling 3; multi_shot + elements supported)
   pipeline <p.yaml>    Image -> video pipeline
+  element <name> <img...>  Create a reusable Kling element (reference subject)
   --help, -h           Show this help
   --version, -v        Show version
 

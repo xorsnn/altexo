@@ -24,12 +24,35 @@ resolution: "2K"                   # 1K | 2K | 4K — used for cost reporting on
 quality: high                       # gpt-image-1 only (run via gen-openai.js): low | medium | high. Nano Banana ignores it. Note: gpt-image-1 has no true 9:16 — a 9:16 input maps to 1024x1536 (2:3).
 
 # Video-only
-seconds: 8                          # Veo: 4|6|8 — Kling: 5|10
+seconds: 8                          # Veo: 4|6|8 — Kling v3: 3-15 (gen-kling default 5)
 image_input: refs/hero.png         # animate this still (first frame) instead of pure text-to-video
 image_tail: refs/end.png           # optional — condition the LAST frame too. Requires image_input. Use for seamless loops (set image_tail == image_input) or for hard A->B transitions. Supported on Kling Pro (image_tail) and Veo 3.1 (lastFrame). Cost is the same as a regular image-conditioned generation.
 audio: true                         # native audio. Veo: on by default (free). Kling: OFF by default — set true for synced SFX/ambient (sends the official `sound:"on"`). Needs a PRO model + single start frame (no image_tail): kling-pro. ~2x cost.
 resolution: "1080p"                # Veo only — 1080p (1080x1920 at 9:16) is default. REQUIRES seconds: 8. Use "720p" for 4s/6s clips.
 negative_prompt: blur, distort     # Kling only
+
+# Multi-shot (Kling v3 only) — split one clip into up to 6 prompted segments.
+# The SUM of the shot `seconds` must be a valid Kling length (3-15); when present,
+# top-level `seconds` is ignored. shot_type: customize (honor the list) | intelligence (auto).
+shot_type: customize
+multi_shot:
+  - prompt: "Wide establishing shot, slow push-in."
+    seconds: 3
+  - prompt: "Cut to close-up, action peaks."
+    seconds: 4
+
+# Reference subjects / elements (Kling v3 only) — character/object consistency.
+# Reuse pre-created ids, or create inline from images (max 3 elements). Reference them
+# in the prompt as <<<element_1>>>, <<<element_2>>>, … (positional). Make a reusable id:
+#   node scripts/gen-kling-element.js <name> <frontal.png> <refer1.png> [refer2 ...]
+# (an image element needs a frontal + 1-3 refer images.)
+element_ids: [12345]                 # pre-created element ids (optional)
+elements:                            # OR create inline (frontal first, then 1-3 refer images)
+  - name: hero-bot                   # element_name ≤ 20 chars
+    description: "short ≤100-char subject description"
+    images:
+      - refs/hero-front.png
+      - refs/hero-side.png
 ```
 
 ## Project field (required)

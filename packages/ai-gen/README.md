@@ -156,6 +156,17 @@ with `audio: true` doubles (2× `audioMultiplier`).
   wrapper sends the official Kling `sound: "on"` field. Pro tier only, single start
   frame only (not with `image_tail`), billed at the model's `audioMultiplier` (~2×).
   Other tiers are silent — pair with a music bed in your editor.
+- **Multi-shot** (Kling v3): `multi_shot: [{ prompt, seconds }]` (≤6 shots) splits one clip
+  into prompted segments; the seconds sum to the clip length (3–15). `shot_type: customize`
+  honors the list, `intelligence` auto-storyboards. Good for a motion *arc*, not a
+  hold-still beat. (lib: `generateVideo({ multiShot, shotType })`.)
+- **Reference subjects / elements** (Kling v3): keep a character/object consistent across the
+  clip. Build a reusable element with `node scripts/gen-kling-element.js <name> <frontal.png>
+  <refer1.png> [refer2 ...]` (a frontal + 1–3 refer images), or inline via `elements: [{name,
+  description, images}]`; then reference it in the prompt as `<<<element_1>>>` (max 3). lib:
+  `createElement()` + `generateVideo({ elementIds })`.
+- Base URL override: `KLING_BASE_URL` (the international host moved to
+  `api-singapore.klingai.com`; the default `api.klingai.com` still resolves).
 - Rate limits are stricter than Google's; keep calls sequential.
 
 ### OpenAI gpt-image-1 — `src/openai-image.js`
