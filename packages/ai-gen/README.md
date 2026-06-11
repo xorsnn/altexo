@@ -86,10 +86,14 @@ wrapped as `AiGenError`). Caller aborts and timeouts surface unwrapped
 distinction even though the underlying SDK drops abort reasons.
 
 Trust boundaries: `references` paths are read from disk and sent to the
-provider — never wire raw user input into them. `saveImages(images, outDir,
-prefix)` creates `outDir` if missing; `outDir` must be server-trusted and
-`prefix` must be a bare file-name fragment (path separators are rejected).
-`saveImages` filesystem failures are raw Node errors, not taxonomy errors.
+provider — never wire raw user input into them (the reads are bounded by the
+same abort/timeout as the provider call). `saveImages(images, outDir, prefix)`
+creates `outDir` if missing; `outDir` must be server-trusted and `prefix` must
+be a bare file-name fragment (path separators are rejected). File names are
+deterministic, so a reused `outDir` fails loudly (`wx`) instead of silently
+overwriting a sibling generation. `saveImages` filesystem failures are raw
+Node errors, not taxonomy errors, and all writes have settled before it
+returns or throws.
 
 **Next.js embedders:** add `serverExternalPackages: ['@altexo/ai-gen']` to
 `next.config.js`. The model registry is read from a packaged JSON at runtime

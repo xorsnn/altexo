@@ -19,8 +19,8 @@ function mimeFor(ext) {
   throw new InvalidInputError(`Unsupported image extension: ${ext}`);
 }
 
-async function partFromFile(path) {
-  const data = await readFile(path);
+async function partFromFile(path, signal) {
+  const data = await readFile(path, signal ? { signal } : undefined);
   return {
     inlineData: {
       mimeType: mimeFor(extname(path)),
@@ -33,7 +33,7 @@ async function partFromFile(path) {
 // Exported so the response→images contract is testable offline.
 export function extractImages(response) {
   const images = [];
-  for (const candidate of response.candidates ?? []) {
+  for (const candidate of response?.candidates ?? []) {
     for (const part of candidate.content?.parts ?? []) {
       if (part.inlineData?.data) {
         images.push({
@@ -51,15 +51,15 @@ export function extractImages(response) {
 //                   apiKey, signal, timeoutMs })
 //     → { images: [{ mimeType, data: Buffer }], modelId, costEstimate }
 //
+// - All caller input is validated BEFORE the key is resolved and before any
+//   I/O, so a bad call reports its own problem ('invalid-input'), not the
+//   host's key situation ('missing-key').
 // - `apiKey` is per-call; falls back to GEMINI_API_KEY. Missing both — or an
-//   explicit apiKey that is empty/not a string — throws MissingKeyError
-//   before any network I/O.
-// - Bad caller input (unknown model alias, unreadable/unsupported reference,
-//   non-positive numberOfImages) throws InvalidInputError before any I/O —
-//   deterministic, so retrying without changing the input is pointless.
-// - `signal` (AbortSignal) cancels the call; `timeoutMs` (default 120s, 0 to
-//   disable) bounds it so a hung request can't pin a caller forever. Aborts
-//   and timeouts surface unwrapped (err.name 'AbortError' / 'TimeoutError').
+//   explicit apiKey that is empty/not a string — throws MissingKeyError.
+// - `signal` (AbortSignal) cancels the call INCLUDING the reference-file
+//   reads; `timeoutMs` (default 120s, 0 to disable) bounds the whole thing so
+//   a hung request or a blocking read can't pin a caller forever. Aborts and
+//   timeouts surface unwrapped (err.name 'AbortError' / 'TimeoutError').
 // - Zero returned images throws SafetyBlockError; provider/transport failures
 //   map onto the errors.js taxonomy. The raw provider payload is never leaked.
 // - `costEstimate` is USD at the default 2K resolution, images.length × unit
@@ -90,33 +90,36 @@ export async function generateImage({
       `numberOfImages must be a positive integer, got: ${numberOfImages}`
     );
   }
-  const key = apiKey ?? requireEnv('GEMINI_API_KEY', ', or pass an explicit apiKey to the call');
+  if (timeoutMs != null && (!Number.isFinite(timeoutMs) || timeoutMs < 0)) {
+    // NaN is falsy: without this check it would silently disable the one
+    // guard against a hung request; a negative value would fire instantly.
+    throw new InvalidInputError(`timeoutMs must be a non-negative finite number, got: ${timeoutMs}`);
+  }
+  if (signal !== undefined && !(signal instanceof AbortSignal)) {
+    throw new InvalidInputError('signal must be an AbortSignal');
+  }
   const entry = MODELS[model];
   if (!entry) {
     throw new InvalidInputError(
       `Unknown model alias: ${model} (known: ${Object.keys(MODELS).join(', ')})`
     );
   }
+  if (entry.kind !== 'image') {
+    throw new InvalidInputError(
+      `Model alias '${model}' is a ${entry.kind} model — generateImage only accepts image models`
+    );
+  }
+  const key = apiKey ?? requireEnv('GEMINI_API_KEY', ', or pass an explicit apiKey to the call');
   const modelId = entry.id;
   // vertexai: false pins the Gemini API backend — without it the SDK sniffs
   // GOOGLE_GENAI_USE_VERTEXAI from the host env and could silently reroute
   // an embedder's calls to Vertex with a Gemini API key.
   const ai = _client ?? new GoogleGenAI({ apiKey: key, vertexai: false });
 
-  let refParts;
-  try {
-    refParts = await Promise.all(references.map(partFromFile));
-  } catch (err) {
-    if (err instanceof AiGenError) throw err; // mimeFor's InvalidInputError
-    throw new InvalidInputError(`Could not read reference image: ${err.message}`, {
-      cause: err,
-    });
-  }
-  const parts = [...refParts, { text: prompt }];
-
   // Manual timeout controller instead of AbortSignal.timeout: the timer is
   // cleared the moment the call settles (no stale 120s timers under parallel
   // tile generation), and the TimeoutError reason stays inspectable below.
+  // Built BEFORE the reference reads so those are bounded too.
   const timeoutCtrl = timeoutMs ? new AbortController() : null;
   const timer = timeoutMs
     ? setTimeout(
@@ -133,6 +136,21 @@ export async function generateImage({
 
   let response;
   try {
+    let refParts;
+    try {
+      refParts = await Promise.all(references.map((p) => partFromFile(p, abortSignal)));
+    } catch (err) {
+      // Aborts/timeouts fall through to the outer recovery; everything else
+      // here is a deterministic caller error (unreadable path, bad extension).
+      if (err instanceof AiGenError || err?.name === 'AbortError' || err?.name === 'TimeoutError') {
+        throw err;
+      }
+      throw new InvalidInputError(`Could not read reference image: ${err.message}`, {
+        cause: err,
+      });
+    }
+    const parts = [...refParts, { text: prompt }];
+
     response = await ai.models.generateContent({
       model: modelId,
       contents: [{ role: 'user', parts }],
@@ -195,6 +213,14 @@ export async function saveImages(images, outDir, prefix = 'img') {
     const ext = EXT_FOR_MIME[img.mimeType] ?? 'png';
     return `${outDir}/${prefix}-${String(i + 1).padStart(2, '0')}.${ext}`;
   });
-  await Promise.all(images.map((img, i) => writeFile(paths[i], img.data)));
+  // 'wx': names are deterministic, so a reused outDir would silently
+  // overwrite a sibling generation's tiles — fail loudly instead.
+  // allSettled: every write has settled before this returns or throws, so a
+  // caller's cleanup/retry never races half-finished writes.
+  const results = await Promise.allSettled(
+    images.map((img, i) => writeFile(paths[i], img.data, { flag: 'wx' }))
+  );
+  const firstFailure = results.find((r) => r.status === 'rejected');
+  if (firstFailure) throw firstFailure.reason;
   return paths;
 }

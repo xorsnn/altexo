@@ -57,13 +57,25 @@ Library hardening: the package is now safe to embed in a long-lived server
   cost reflects the actual count.
 - The Gemini backend is pinned (`vertexai: false`) so ambient
   `GOOGLE_GENAI_USE_VERTEXAI` in a host environment cannot reroute calls.
-- Reference images are read in parallel and failures surface as
-  `invalid-input` taxonomy errors (previously a raw `ENOENT` escaped the
-  contract). Unknown model aliases throw `invalid-input` instead of a
-  `TypeError`.
-- `saveImages` creates `outDir` if missing, writes in parallel, derives
+- Provider HTTP statuses route onto the taxonomy: 401/403 → `missing-key`
+  (a revoked key must not look retryable), 400 → `invalid-input`, 5xx →
+  `network`.
+- All caller input is validated before the key is resolved and before any
+  I/O — a bad model alias on an unconfigured host reports `invalid-input`,
+  not `missing-key`. Validation now also covers `timeoutMs` (NaN previously
+  disabled the hang guard silently; negative fired instantly), non-AbortSignal
+  `signal` values, and video-model aliases passed to `generateImage`.
+- Reference images are read in parallel, bounded by the same abort/timeout as
+  the provider call, and failures surface as `invalid-input` taxonomy errors
+  (previously a raw `ENOENT` escaped the contract). Unknown model aliases
+  throw `invalid-input` instead of a `TypeError`.
+- `saveImages` creates `outDir` if missing, writes in parallel with `wx`
+  (a reused `outDir` fails loudly instead of silently overwriting a sibling
+  generation), settles every write before returning or throwing, derives
   extensions through the mime allowlist (provider-controlled `mimeType` no
   longer lands raw in filenames), and rejects path-traversing prefixes.
+- CLI scripts validate the model alias before use (previously a raw
+  `TypeError` preempted the library's error).
 - `engines.node` raised to `>=20.3` (`AbortSignal.any`).
 
 ## [0.4.0] - 2026-06-07

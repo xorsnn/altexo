@@ -539,3 +539,86 @@ test('estimateImageCost is the single source of truth for batch cost', () => {
   assert.equal(estimateImageCost('nano-banana', 1, '4K'), 0.24);
   assert.equal(estimateImageCost('does-not-exist', 5), 0); // unknown model → 0, not NaN
 });
+
+// --- adversarial-pass fixes ---------------------------------------------------
+
+test('provider HTTP statuses route onto the taxonomy: 401/403 missing-key, 400 invalid-input', () => {
+  assert.equal(classifyError(Object.assign(new Error('PERMISSION_DENIED'), { status: 403 })).code, 'missing-key');
+  assert.equal(classifyError(Object.assign(new Error('unauthorized'), { status: 401 })).code, 'missing-key');
+  assert.equal(classifyError(Object.assign(new Error('INVALID_ARGUMENT'), { status: 400 })).code, 'invalid-input');
+});
+
+test('invalid timeoutMs and signal are rejected pre-I/O as invalid-input', async () => {
+  const client = fakeClient(async () => responseWith([imagePart]));
+  for (const badTimeout of [NaN, -5, Infinity]) {
+    await assert.rejects(
+      generateImage({ prompt: 'x', apiKey: 'k', timeoutMs: badTimeout, _client: client }),
+      (e) => e instanceof InvalidInputError
+    );
+  }
+  await assert.rejects(
+    generateImage({ prompt: 'x', apiKey: 'k', signal: {}, _client: client }),
+    (e) => e instanceof InvalidInputError && /AbortSignal/.test(e.message)
+  );
+});
+
+test('input validation precedes key resolution: bad model on keyless host → invalid-input', async () => {
+  await withoutGeminiKey(async () => {
+    await assert.rejects(generateImage({ prompt: 'x', model: 'no-such-model' }), (e) => {
+      assert.equal(e.code, 'invalid-input', 'must not report missing-key for a caller bug');
+      return true;
+    });
+  });
+});
+
+test('video model alias is rejected by generateImage as invalid-input', async () => {
+  await assert.rejects(
+    generateImage({ prompt: 'x', model: 'veo', apiKey: 'k' }),
+    (e) => e instanceof InvalidInputError && /video model/.test(e.message)
+  );
+});
+
+test('a pre-aborted caller signal stops reference reads and surfaces as AbortError', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'aigen-ref-'));
+  const refPath = join(dir, 'frame.png');
+  await writeFile(refPath, Buffer.from('png'));
+  const controller = new AbortController();
+  controller.abort();
+  let called = false;
+  const client = fakeClient(async () => {
+    called = true;
+    return responseWith([imagePart]);
+  });
+  await assert.rejects(
+    generateImage({
+      prompt: 'x',
+      references: [refPath],
+      apiKey: 'k',
+      signal: controller.signal,
+      _client: client,
+    }),
+    (e) => {
+      assert.equal(e.name, 'AbortError');
+      assert.ok(!(e instanceof InvalidInputError), 'abort must not masquerade as a bad reference');
+      return true;
+    }
+  );
+  assert.equal(called, false, 'provider must never be called after a pre-abort');
+});
+
+test('extractImages tolerates null/undefined responses', () => {
+  assert.deepEqual(extractImages(null), []);
+  assert.deepEqual(extractImages(undefined), []);
+});
+
+test('saveImages fails loudly on a filename collision instead of overwriting', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'aigen-save-'));
+  const images = [{ mimeType: 'image/png', data: Buffer.from('first') }];
+  await saveImages(images, dir, 'tile');
+  await assert.rejects(
+    saveImages([{ mimeType: 'image/png', data: Buffer.from('second') }], dir, 'tile'),
+    (e) => e.code === 'EEXIST'
+  );
+  // The original tile is untouched — last-writer-wins corruption is gone.
+  assert.deepEqual(await readFile(join(dir, 'tile-01.png')), Buffer.from('first'));
+});

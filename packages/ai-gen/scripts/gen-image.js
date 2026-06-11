@@ -27,6 +27,10 @@ if (!yaml.project) {
 const project = yaml.project;
 const slug = yaml.slug || 'unnamed';
 const model = yaml.model || 'nano-banana';
+if (!MODELS[model]) {
+  console.error(`[${slug}] unknown model alias: ${model} (known: ${Object.keys(MODELS).join(', ')})`);
+  process.exit(1);
+}
 const aspect = yaml.aspect || '9:16';
 const numberOfImages = yaml.count || 1;
 const references = (yaml.references || []).map(p => resolve(process.cwd(), p));

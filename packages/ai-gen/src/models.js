@@ -13,8 +13,8 @@
 //
 // readFileSync + JSON.parse (not a JSON import attribute) keeps `MODELS` a
 // populated, synchronous object at module-eval time — the contract every
-// consumer relies on (e.g. tools/ai-gen-mcp/lib/worker.js reads MODELS[x].id
-// the instant it imports).
+// consumer relies on. External consumers import MODELS from the package root
+// (the exports map blocks deep src/* imports as of 0.5.0).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, isAbsolute } from 'node:path';

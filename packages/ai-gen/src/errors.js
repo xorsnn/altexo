@@ -77,9 +77,16 @@ export function classifyError(err) {
   const message = err?.message ?? String(err);
 
   if (status === 429) return new RateLimitError(message, { cause: err });
+  // 401/403: the key is rejected (revoked, rotated, wrong project). Routing
+  // these to 'unknown' would let an embedder's retry loop hammer the provider
+  // with a dead key.
+  if (status === 401 || status === 403) return new MissingKeyError(message, { cause: err });
   if (/api[ _]?key.{0,10}(not[ _]?valid|invalid)|API_KEY_INVALID/i.test(message)) {
     return new MissingKeyError(message, { cause: err });
   }
+  // 400: the provider rejected the request deterministically (bad aspect,
+  // over-cap count, malformed input) — retrying unchanged is pointless.
+  if (status === 400) return new InvalidInputError(message, { cause: err });
   if (status !== undefined && status >= 500) return new NetworkError(message, { cause: err });
   if (NETWORK_SYSCALL_CODES.has(err?.code) || NETWORK_SYSCALL_CODES.has(err?.cause?.code)) {
     return new NetworkError(message, { cause: err });
