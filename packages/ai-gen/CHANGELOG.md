@@ -4,6 +4,46 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-06-11
+
+Library hardening: the package is now safe to embed in a long-lived server
+(previously CLI-only semantics could kill the host process).
+
+### Added
+
+- **Stable library surface.** `package.json` gains `main` + `exports`
+  (`.` → `src/index.js`); import `generateImage`, `saveImages`, `extractImages`,
+  `MODELS`, `priceImage`, `priceVideo`, and the error classes from the package
+  root. Deep `src/*` imports are no longer part of the contract. Video
+  generators (Veo, Kling) stay CLI-first, off the surface until hardened.
+- **Per-call `apiKey`** on `generateImage` — falls back to `GEMINI_API_KEY`.
+  Unblocks BYO-key embedding without mutating `process.env`.
+- **Abort + timeout.** `generateImage({ signal, timeoutMs })` — caller's
+  `AbortSignal` is honored, and a default 120s bound (`AbortSignal.timeout` +
+  SDK `httpOptions.timeout`) stops a hung request from pinning the caller.
+  Aborts/timeouts surface unwrapped (`err.name === 'AbortError'/'TimeoutError'`).
+- **Structured error taxonomy** (`src/errors.js`): `AiGenError` with stable
+  `code` — `missing-key`, `safety-block` (model returned zero images),
+  `rate-limit` (429), `network` (transport/5xx), `unknown` fallback.
+  `classifyError()` maps raw SDK/fetch failures onto it.
+- Offline contract test suite (`test/library-contract.test.js`): throw-not-exit
+  regression, per-call key, return shape, taxonomy mapping, abort passthrough,
+  exports-map self-import.
+
+### Changed
+
+- **`requireEnv` throws `MissingKeyError` instead of `console.error` +
+  `process.exit(1)`** — the regression that motivated this release: an embedded
+  missing/rotated key must not take down the host server. CLI scripts now exit
+  non-zero via the uncaught throw (message first, then stack).
+- **`generateImage` returns the stable shape
+  `{ images: [{ mimeType, data }], modelId, costEstimate }`** — `raw` (the
+  full provider payload) is no longer returned; `costEstimate` is USD at the
+  default 2K rate × image count. Zero images now throws `SafetyBlockError`
+  instead of a bare `Error`.
+- An unknown model alias throws a descriptive `AiGenError` instead of a
+  `TypeError` on property access.
+
 ## [0.4.0] - 2026-06-07
 
 ### Added

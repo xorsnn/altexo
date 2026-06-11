@@ -53,6 +53,37 @@ scannable at a glance. Every prompt YAML must declare a `project:` field — the
 scripts refuse to run without it (see [`prompts/_schema.md`](prompts/_schema.md)).
 `out/` is gitignored.
 
+## Library usage
+
+The package is embeddable — import from the package root (deep `src/*` imports
+are not part of the contract):
+
+```js
+import { generateImage, MissingKeyError, SafetyBlockError } from '@altexo/ai-gen';
+
+const { images, modelId, costEstimate } = await generateImage({
+  prompt: 'a lighthouse at dusk, volumetric fog',
+  aspect: '9:16',
+  references: ['/tmp/parent-frame.png'], // read from disk
+  numberOfImages: 3,
+  apiKey: userKey,                        // per-call; falls back to GEMINI_API_KEY
+  signal: controller.signal,              // optional AbortSignal
+  timeoutMs: 120_000,                     // default; bounds a hung request
+});
+// images: [{ mimeType, data: Buffer }]
+```
+
+The library **throws, never calls `process.exit`** — safe to embed in a server.
+Failures carry a stable `code` for programmatic handling: `missing-key`
+(no/invalid key), `safety-block` (model returned zero images — rephrase and
+retry), `rate-limit` (HTTP 429 — back off), `network` (transport/5xx — retry),
+`unknown` (anything else, wrapped as `AiGenError`). Caller aborts and timeouts
+pass through unwrapped (`err.name === 'AbortError' | 'TimeoutError'`).
+
+Also exported: `saveImages`, `MODELS`, `priceImage`, `priceVideo`, and the
+error classes. The video generators (Veo, Kling) are CLI-first and not yet on
+the library surface.
+
 ## Configuration
 
 The toolkit runs from config — nothing is hardcoded to a particular machine or repo.
