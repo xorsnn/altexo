@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import '../src/cli-env.js'; // FIRST import: loads .env before env-reading modules evaluate
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
@@ -6,9 +7,6 @@ import { generateVideo, saveVideo } from '../src/kling.js';
 import { createElement } from '../src/kling-elements.js';
 import { makeOutDir } from '../src/out-dir.js';
 import { MODELS, priceVideo } from '../src/models.js';
-import { loadLocalEnv } from '../src/env.js';
-
-loadLocalEnv(); // CLI mode: pull keys from the package-local .env
 
 const promptFile = process.argv[2];
 if (!promptFile) {

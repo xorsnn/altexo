@@ -3,15 +3,13 @@
 // gen-image.js (nano-banana) so the SAME prompt file can feed both engines for a
 // clean A/B — only the engine differs. Reads OPENAI_API_KEY from .env (package
 // root) or your shell environment via src/env.js.
+import '../src/cli-env.js'; // FIRST import: loads .env before env-reading modules evaluate
 import { readFile, writeFile } from 'node:fs/promises';
 import { parse as parseYaml } from 'yaml';
 import { generateImage } from '../src/openai-image.js';
 import { saveImages } from '../src/nano-banana.js';
 import { makeOutDir } from '../src/out-dir.js';
 import { priceImage } from '../src/models.js';
-import { loadLocalEnv } from '../src/env.js';
-
-loadLocalEnv(); // CLI mode: pull keys from the package-local .env
 
 const promptFile = process.argv[2];
 if (!promptFile) {
