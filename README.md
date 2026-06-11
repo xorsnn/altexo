@@ -8,7 +8,7 @@ share this monorepo for config and release. MIT licensed.
 
 | Package | Status | What it does |
 | ------- | ------ | ------------ |
-| [`@altexo/ai-gen`](packages/ai-gen) | available | Direct-API CLI + library for AI image/video generation (Nano Banana Pro, Veo 3.1, Kling 3). Cheaper, reproducible alternative to aggregators for repeated templates. |
+| [`@altexo/ai-gen`](packages/ai-gen) | available | Direct-API CLI + library for AI image/video generation (Nano Banana Pro, Veo 3.1, Kling 3, OpenAI gpt-image-1). Cheaper, reproducible alternative to aggregators for repeated templates. |
 | `@altexo/blender` | planned | Scripts for authoring scenes and rendering video with Blender headless. |
 | `@altexo/skills` | planned | Reusable agent skills / slash-commands for the media workflow. |
 

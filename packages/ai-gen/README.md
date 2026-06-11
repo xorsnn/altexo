@@ -109,9 +109,11 @@ OpenAI image generator.
 
 The toolkit runs from config — nothing is hardcoded to a particular machine or repo.
 
-**API keys.** The CLI entry points load `.env` from the package root if present
-(the library never does — pass `apiKey` per call or set the env vars yourself);
-values already in your shell environment take precedence. Required:
+**API keys.** The CLI loads `.env` if present — package-local when run from a
+clone, from your current directory when installed via npm/`npx` (that's where
+`altexo-ai-gen init` writes it). The library never loads `.env` — pass `apiKey`
+per call or set the env vars yourself. Values already in your shell environment
+take precedence. Required:
 
 - `GEMINI_API_KEY` — Nano Banana + Veo — <https://aistudio.google.com/apikey>
 - `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` — Kling — <https://app.klingai.com/global/dev/account>

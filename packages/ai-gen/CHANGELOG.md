@@ -75,8 +75,10 @@ Library hardening: the package is now safe to embed in a long-lived server
   generation), settles every write before returning or throwing, derives
   extensions through the mime allowlist (provider-controlled `mimeType` no
   longer lands raw in filenames), and rejects path-traversing prefixes.
-- CLI scripts validate the model alias before use (previously a raw
-  `TypeError` preempted the library's error).
+- The image CLI scripts (`gen-image`, `gen-pipeline`) validate the model alias
+  before use (previously a raw `TypeError` preempted the library's error). The
+  video scripts (`gen-veo`, `gen-kling`) don't yet — same TypeError as before
+  on a bad alias.
 - `engines.node` raised to `>=20.3` (`AbortSignal.any`).
 
 ## [0.4.0] - 2026-06-07

@@ -39,8 +39,9 @@ guess at the fix — do not retry blindly or invent keys.
    ```bash
    npx @altexo/ai-gen init          # or, from a clone: node bin/altexo-ai-gen.js init
    ```
-   Answer the Gemini prompt; skip Kling unless the user has those keys; decline
-   the smoke-test prompt here (the next step runs it explicitly).
+   Answer the Gemini prompt; skip the Kling and OpenAI prompts unless the user
+   has those keys; decline the smoke-test prompt here (the next step runs it
+   explicitly).
 
 5. **Smoke test — one ~$0.04 image.**
    ```bash
@@ -58,7 +59,8 @@ guess at the fix — do not retry blindly or invent keys.
 
 - `altexo-ai-gen init` — guided key setup → `.env`
 - `altexo-ai-gen smoke` — one cheap test image
-- `altexo-ai-gen image|veo|kling|pipeline <prompt.yaml>` — the generators
+- `altexo-ai-gen image|openai|veo|kling|pipeline <prompt.yaml>` — the generators
+  (plus `element <name> <imgs>` to build a Kling reference subject)
 - `altexo-ai-gen --help` — full command list
 
 Outputs are deterministic folders with a `manifest.json` reproducibility receipt.
