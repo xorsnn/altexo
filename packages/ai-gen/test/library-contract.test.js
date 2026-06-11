@@ -20,13 +20,14 @@ import { fileURLToPath } from 'node:url';
 
 import { generateImage, extractImages, saveImages } from '../src/nano-banana.js';
 import { requireEnv, optionalEnv } from '../src/env.js';
-import { MODELS, priceImage } from '../src/models.js';
+import { MODELS, priceImage, estimateImageCost } from '../src/models.js';
 import {
   AiGenError,
   MissingKeyError,
   SafetyBlockError,
   RateLimitError,
   NetworkError,
+  InvalidInputError,
   classifyError,
 } from '../src/errors.js';
 
@@ -205,9 +206,9 @@ test('package root import (exports map) exposes the full library surface', async
   const api = await import('@altexo/ai-gen'); // self-reference via package.json exports
   for (const name of [
     'generateImage', 'saveImages', 'extractImages',
-    'MODELS', 'priceImage', 'priceVideo',
+    'MODELS', 'priceImage', 'priceVideo', 'estimateImageCost',
     'AiGenError', 'MissingKeyError', 'SafetyBlockError', 'RateLimitError',
-    'NetworkError', 'classifyError',
+    'NetworkError', 'InvalidInputError', 'classifyError',
   ]) {
     assert.ok(name in api, `missing export: ${name}`);
   }
@@ -252,7 +253,25 @@ test('unsupported reference extension throws AiGenError (regression: was bare Er
     generateImage({ prompt: 'x', references: [badRef], apiKey: 'k', _client: client }),
     (e) => {
       assert.ok(e instanceof AiGenError, 'must be on the taxonomy, not a bare Error');
+      assert.equal(e.code, 'invalid-input');
       assert.match(e.message, /Unsupported image extension/);
+      return true;
+    }
+  );
+});
+
+test('missing reference file rejects as invalid-input, not raw ENOENT', async () => {
+  const client = fakeClient(async () => responseWith([imagePart]));
+  await assert.rejects(
+    generateImage({
+      prompt: 'x',
+      references: ['/nope/missing-parent-frame.png'],
+      apiKey: 'k',
+      _client: client,
+    }),
+    (e) => {
+      assert.ok(e instanceof InvalidInputError, `escaped the taxonomy: ${e.name} ${e.code}`);
+      assert.equal(e.cause?.code, 'ENOENT', 'original fs error preserved as cause');
       return true;
     }
   );
@@ -379,12 +398,144 @@ test('saveImages writes one file per image, extension from mime, png fallback', 
   const images = [
     { mimeType: 'image/jpeg', data: Buffer.from('jpeg-bytes') },
     { data: Buffer.from('mystery-bytes') }, // no mimeType → png fallback
+    { mimeType: 'image/svg+xml', data: Buffer.from('odd') }, // off-allowlist → png
   ];
   const paths = await saveImages(images, dir, 'tile');
   assert.deepEqual(
     paths.map((p) => p.split('/').pop()),
-    ['tile-01.jpeg', 'tile-02.png']
+    ['tile-01.jpeg', 'tile-02.png', 'tile-03.png']
   );
   assert.deepEqual(await readFile(paths[0]), Buffer.from('jpeg-bytes'));
   assert.deepEqual(await readFile(paths[1]), Buffer.from('mystery-bytes'));
+});
+
+test('saveImages creates a missing outDir and rejects path-traversing prefixes', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'aigen-save-'));
+  const nested = join(base, 'does', 'not', 'exist');
+  const paths = await saveImages([{ mimeType: 'image/png', data: Buffer.from('x') }], nested);
+  assert.deepEqual(await readFile(paths[0]), Buffer.from('x'));
+
+  await assert.rejects(
+    saveImages([{ mimeType: 'image/png', data: Buffer.from('x') }], base, '../escape'),
+    (e) => e instanceof InvalidInputError
+  );
+});
+
+// --- review-pass fixes: abort-reason recovery, validation, cost helper -------
+
+// Mimics the real @google/genai behavior the offline fakes were masking: the
+// SDK re-wraps the abort signal and rejects with a generic AbortError, never
+// forwarding the reason. The library must recover the distinction itself.
+const sdkFaithfulHangingClient = () =>
+  fakeClient(
+    (req) =>
+      new Promise((_resolve, reject) => {
+        const onAbort = () =>
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        if (req.config.abortSignal.aborted) onAbort();
+        else req.config.abortSignal.addEventListener('abort', onAbort, { once: true });
+      })
+  );
+
+test('timeout expiry surfaces as TimeoutError even though the SDK drops abort reasons', async () => {
+  await assert.rejects(
+    generateImage({ prompt: 'x', apiKey: 'k', timeoutMs: 20, _client: sdkFaithfulHangingClient() }),
+    (e) => {
+      assert.equal(e.name, 'TimeoutError');
+      assert.match(e.message, /timed out after 20ms/);
+      assert.ok(!(e instanceof AiGenError), 'must pass through unwrapped');
+      return true;
+    }
+  );
+});
+
+test('caller abort surfaces as AbortError through an SDK-faithful client', async () => {
+  const controller = new AbortController();
+  const pending = generateImage({
+    prompt: 'x',
+    apiKey: 'k',
+    signal: controller.signal,
+    _client: sdkFaithfulHangingClient(),
+  });
+  controller.abort();
+  await assert.rejects(pending, (e) => {
+    assert.equal(e.name, 'AbortError');
+    assert.ok(!(e instanceof AiGenError), 'must pass through unwrapped');
+    return true;
+  });
+});
+
+test('timeoutMs: 0 with no caller signal sends no abort signal at all', async () => {
+  let seen;
+  const client = fakeClient(async (req) => {
+    seen = req;
+    return responseWith([imagePart]);
+  });
+  await generateImage({ prompt: 'x', apiKey: 'k', timeoutMs: 0, _client: client });
+  assert.equal(seen.config.abortSignal, undefined);
+  assert.equal(seen.config.httpOptions, undefined);
+});
+
+test('numberOfImages must be a positive integer — rejected before any I/O', async () => {
+  let called = false;
+  const client = fakeClient(async () => {
+    called = true;
+    return responseWith([imagePart]);
+  });
+  for (const bad of [0, -1, 2.5, '3']) {
+    await assert.rejects(
+      generateImage({ prompt: 'x', numberOfImages: bad, apiKey: 'k', _client: client }),
+      (e) => e instanceof InvalidInputError && e.code === 'invalid-input'
+    );
+  }
+  assert.equal(called, false, 'no request must be attempted');
+});
+
+test('explicit empty-string apiKey throws missing-key before any I/O (no env fallback)', async () => {
+  const saved = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'env-key-that-must-not-be-billed';
+  let called = false;
+  const client = fakeClient(async () => {
+    called = true;
+    return responseWith([imagePart]);
+  });
+  try {
+    await assert.rejects(
+      generateImage({ prompt: 'x', apiKey: '', _client: client }),
+      (e) => e instanceof MissingKeyError && e.code === 'missing-key'
+    );
+    assert.equal(called, false);
+  } finally {
+    if (saved !== undefined) process.env.GEMINI_API_KEY = saved;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('provider may return fewer images than requested — success, cost reflects actual', async () => {
+  const client = fakeClient(async () => responseWith([imagePart])); // asked 3, got 1
+  const result = await generateImage({
+    prompt: 'x',
+    numberOfImages: 3,
+    apiKey: 'k',
+    _client: client,
+  });
+  assert.equal(result.images.length, 1);
+  assert.equal(result.costEstimate, estimateImageCost('nano-banana', 1));
+});
+
+test('classifyError tolerates non-Error throwables and foreign taxonomy instances', () => {
+  assert.equal(classifyError('fetch failed').code, 'network'); // String(err) path
+  assert.equal(classifyError(null).code, 'unknown');
+  assert.equal(classifyError(undefined).code, 'unknown');
+
+  // A taxonomy error built by a second module copy fails instanceof but must
+  // be recognized structurally, never demoted to 'unknown'.
+  const foreign = Object.assign(new Error('blocked by safety'), { code: 'safety-block' });
+  assert.equal(classifyError(foreign), foreign);
+});
+
+test('estimateImageCost is the single source of truth for batch cost', () => {
+  assert.equal(estimateImageCost('nano-banana', 3), 0.402); // the ~$0.40 fork estimate
+  assert.equal(estimateImageCost('nano-banana', 1, '4K'), 0.24);
+  assert.equal(estimateImageCost('does-not-exist', 5), 0); // unknown model → 0, not NaN
 });

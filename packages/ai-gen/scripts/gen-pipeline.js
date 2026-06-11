@@ -7,6 +7,9 @@ import * as veo from '../src/veo.js';
 import * as kling from '../src/kling.js';
 import { makeOutDir } from '../src/out-dir.js';
 import { MODELS, priceImage, priceVideo } from '../src/models.js';
+import { loadLocalEnv } from '../src/env.js';
+
+loadLocalEnv(); // CLI mode: pull keys from the package-local .env
 
 const promptFile = process.argv[2];
 if (!promptFile) {

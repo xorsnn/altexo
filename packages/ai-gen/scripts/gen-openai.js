@@ -9,6 +9,9 @@ import { generateImage } from '../src/openai-image.js';
 import { saveImages } from '../src/nano-banana.js';
 import { makeOutDir } from '../src/out-dir.js';
 import { priceImage } from '../src/models.js';
+import { loadLocalEnv } from '../src/env.js';
+
+loadLocalEnv(); // CLI mode: pull keys from the package-local .env
 
 const promptFile = process.argv[2];
 if (!promptFile) {

@@ -8,6 +8,9 @@
 //   element_ids: [<id>]      # and reference <<<element_1>>> in the prompt
 import { resolve } from 'node:path';
 import { createElement } from '../src/kling-elements.js';
+import { loadLocalEnv } from '../src/env.js';
+
+loadLocalEnv(); // CLI mode: pull keys from the package-local .env
 
 const [name, ...imgs] = process.argv.slice(2);
 if (!name || imgs.length === 0) {

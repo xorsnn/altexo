@@ -1,16 +1,22 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { GoogleGenAI } from '@google/genai';
 import { requireEnv } from './env.js';
-import { MODELS, priceImage } from './models.js';
-import { AiGenError, SafetyBlockError, classifyError } from './errors.js';
+import { MODELS, estimateImageCost } from './models.js';
+import {
+  AiGenError,
+  MissingKeyError,
+  SafetyBlockError,
+  InvalidInputError,
+  classifyError,
+} from './errors.js';
 
 function mimeFor(ext) {
   const e = ext.toLowerCase().replace('.', '');
   if (e === 'jpg' || e === 'jpeg') return 'image/jpeg';
   if (e === 'png') return 'image/png';
   if (e === 'webp') return 'image/webp';
-  throw new AiGenError(`Unsupported image extension: ${ext}`);
+  throw new InvalidInputError(`Unsupported image extension: ${ext}`);
 }
 
 async function partFromFile(path) {
@@ -45,14 +51,19 @@ export function extractImages(response) {
 //                   apiKey, signal, timeoutMs })
 //     → { images: [{ mimeType, data: Buffer }], modelId, costEstimate }
 //
-// - `apiKey` is per-call; falls back to GEMINI_API_KEY. Missing both throws
-//   MissingKeyError before any network I/O.
-// - `signal` (AbortSignal) cancels the call; `timeoutMs` (default 120s) bounds
-//   it so a hung request can't pin a caller forever. Aborts/timeouts surface
-//   unwrapped (err.name 'AbortError' / 'TimeoutError').
+// - `apiKey` is per-call; falls back to GEMINI_API_KEY. Missing both — or an
+//   explicit apiKey that is empty/not a string — throws MissingKeyError
+//   before any network I/O.
+// - Bad caller input (unknown model alias, unreadable/unsupported reference,
+//   non-positive numberOfImages) throws InvalidInputError before any I/O —
+//   deterministic, so retrying without changing the input is pointless.
+// - `signal` (AbortSignal) cancels the call; `timeoutMs` (default 120s, 0 to
+//   disable) bounds it so a hung request can't pin a caller forever. Aborts
+//   and timeouts surface unwrapped (err.name 'AbortError' / 'TimeoutError').
 // - Zero returned images throws SafetyBlockError; provider/transport failures
 //   map onto the errors.js taxonomy. The raw provider payload is never leaked.
-// - `costEstimate` is USD at the default 2K resolution, images.length × unit.
+// - `costEstimate` is USD at the default 2K resolution, images.length × unit
+//   (the provider may return fewer than numberOfImages; cost reflects actual).
 // - `_client` is a test seam: injects a fake in place of the GoogleGenAI
 //   instance so the full path is testable offline. Not public API.
 export async function generateImage({
@@ -66,24 +77,59 @@ export async function generateImage({
   timeoutMs = 120_000,
   _client,
 }) {
-  const key = apiKey ?? requireEnv('GEMINI_API_KEY');
+  if (apiKey != null && (typeof apiKey !== 'string' || apiKey.trim() === '')) {
+    // An empty string is not nullish — without this check it would skip the
+    // env fallback AND sail past the missing-key gate into the SDK.
+    throw new MissingKeyError(
+      'An explicit apiKey was passed but is empty or not a string. ' +
+        'Omit it to fall back to GEMINI_API_KEY.'
+    );
+  }
+  if (!Number.isInteger(numberOfImages) || numberOfImages < 1) {
+    throw new InvalidInputError(
+      `numberOfImages must be a positive integer, got: ${numberOfImages}`
+    );
+  }
+  const key = apiKey ?? requireEnv('GEMINI_API_KEY', ', or pass an explicit apiKey to the call');
   const entry = MODELS[model];
   if (!entry) {
-    throw new AiGenError(
+    throw new InvalidInputError(
       `Unknown model alias: ${model} (known: ${Object.keys(MODELS).join(', ')})`
     );
   }
   const modelId = entry.id;
-  const ai = _client ?? new GoogleGenAI({ apiKey: key });
+  // vertexai: false pins the Gemini API backend — without it the SDK sniffs
+  // GOOGLE_GENAI_USE_VERTEXAI from the host env and could silently reroute
+  // an embedder's calls to Vertex with a Gemini API key.
+  const ai = _client ?? new GoogleGenAI({ apiKey: key, vertexai: false });
 
-  const parts = [];
-  for (const refPath of references) parts.push(await partFromFile(refPath));
-  parts.push({ text: prompt });
+  let refParts;
+  try {
+    refParts = await Promise.all(references.map(partFromFile));
+  } catch (err) {
+    if (err instanceof AiGenError) throw err; // mimeFor's InvalidInputError
+    throw new InvalidInputError(`Could not read reference image: ${err.message}`, {
+      cause: err,
+    });
+  }
+  const parts = [...refParts, { text: prompt }];
 
-  const signals = [];
-  if (signal) signals.push(signal);
-  if (timeoutMs) signals.push(AbortSignal.timeout(timeoutMs));
-  const abortSignal = signals.length === 1 ? signals[0] : AbortSignal.any(signals);
+  // Manual timeout controller instead of AbortSignal.timeout: the timer is
+  // cleared the moment the call settles (no stale 120s timers under parallel
+  // tile generation), and the TimeoutError reason stays inspectable below.
+  const timeoutCtrl = timeoutMs ? new AbortController() : null;
+  const timer = timeoutMs
+    ? setTimeout(
+        () =>
+          timeoutCtrl.abort(
+            new DOMException(`Request timed out after ${timeoutMs}ms`, 'TimeoutError')
+          ),
+        timeoutMs
+      )
+    : null;
+  const signals = [signal, timeoutCtrl?.signal].filter(Boolean);
+  const abortSignal =
+    signals.length === 0 ? undefined : signals.length === 1 ? signals[0] : AbortSignal.any(signals);
 
   let response;
   try {
@@ -99,7 +145,17 @@ export async function generateImage({
       },
     });
   } catch (err) {
+    // The SDK wraps our signal in its own AbortController and aborts WITHOUT
+    // forwarding the reason — every abort reaches us as a generic AbortError.
+    // Recover the true cause from our own signals so the documented
+    // AbortError-vs-TimeoutError distinction actually holds through the SDK.
+    if (err?.name === 'AbortError') {
+      if (timeoutCtrl?.signal.aborted) throw timeoutCtrl.signal.reason;
+      if (signal?.aborted) throw signal.reason ?? err;
+    }
     throw classifyError(err);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 
   const images = extractImages(response);
@@ -114,21 +170,31 @@ export async function generateImage({
     );
   }
 
-  const unitCost = priceImage(model) ?? 0;
   return {
     images,
     modelId,
-    costEstimate: Number((unitCost * images.length).toFixed(3)),
+    costEstimate: estimateImageCost(model, images.length),
   };
 }
 
+const EXT_FOR_MIME = {
+  'image/jpeg': 'jpeg',
+  'image/jpg': 'jpeg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+
 export async function saveImages(images, outDir, prefix = 'img') {
-  const paths = [];
-  for (let i = 0; i < images.length; i++) {
-    const ext = (images[i].mimeType || 'image/png').split('/')[1];
-    const path = `${outDir}/${prefix}-${String(i + 1).padStart(2, '0')}.${ext}`;
-    await writeFile(path, images[i].data);
-    paths.push(path);
+  if (/[/\\]|\.\./.test(prefix)) {
+    // The mimeType-derived extension can't traverse (no '/' in a mime
+    // subtype survives the allowlist), so prefix is the only injectable part.
+    throw new InvalidInputError(`prefix must be a bare file-name fragment, got: ${prefix}`);
   }
+  await mkdir(outDir, { recursive: true });
+  const paths = images.map((img, i) => {
+    const ext = EXT_FOR_MIME[img.mimeType] ?? 'png';
+    return `${outDir}/${prefix}-${String(i + 1).padStart(2, '0')}.${ext}`;
+  });
+  await Promise.all(images.map((img, i) => writeFile(paths[i], img.data)));
   return paths;
 }

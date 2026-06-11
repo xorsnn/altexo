@@ -40,6 +40,19 @@ export class NetworkError extends AiGenError {
   }
 }
 
+/** The caller passed bad input (unknown model, unreadable reference, bad
+ * count). Deterministic — retrying without changing the input is pointless,
+ * which is exactly what distinguishes it from 'unknown'. */
+export class InvalidInputError extends AiGenError {
+  constructor(message, opts = {}) {
+    super(message, { ...opts, code: 'invalid-input' });
+  }
+}
+
+const KNOWN_CODES = new Set([
+  'missing-key', 'safety-block', 'rate-limit', 'network', 'invalid-input', 'unknown',
+]);
+
 const NETWORK_SYSCALL_CODES = new Set([
   'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EAI_AGAIN', 'EPIPE',
   'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET', 'UND_ERR_HEADERS_TIMEOUT',
@@ -53,6 +66,11 @@ const NETWORK_SYSCALL_CODES = new Set([
 // can still switch exhaustively on `code`.
 export function classifyError(err) {
   if (err instanceof AiGenError) return err;
+  // A linked checkout and a published copy can coexist in one process (two
+  // module instances); a taxonomy error built by the other copy fails the
+  // instanceof check. Recognize it structurally so a correct classification
+  // is never demoted to 'unknown'.
+  if (err instanceof Error && KNOWN_CODES.has(err.code)) return err;
   if (err?.name === 'AbortError' || err?.name === 'TimeoutError') return err;
 
   const status = typeof err?.status === 'number' ? err.status : undefined;

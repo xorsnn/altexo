@@ -4,7 +4,10 @@ import { resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { generateImage, saveImages } from '../src/nano-banana.js';
 import { makeOutDir } from '../src/out-dir.js';
-import { MODELS, priceImage } from '../src/models.js';
+import { MODELS, estimateImageCost } from '../src/models.js';
+import { loadLocalEnv } from '../src/env.js';
+
+loadLocalEnv(); // CLI mode: pull keys from the package-local .env
 
 const promptFile = process.argv[2];
 if (!promptFile) {
@@ -42,14 +45,13 @@ const elapsed = Number(((Date.now() - t0) / 1000).toFixed(1));
 const outDir = await makeOutDir(project, slug, model);
 const saved = await saveImages(images, outDir);
 
-const unitCost = priceImage(model, yaml.resolution || '2K') ?? 0;
 const manifest = {
   project,
   slug,
   promptFile,
   generatedAt: new Date().toISOString(),
   elapsedSeconds: elapsed,
-  costEstimateUSD: Number((unitCost * images.length).toFixed(3)),
+  costEstimateUSD: estimateImageCost(model, images.length, yaml.resolution || '2K'),
   outputs: saved.map(p => p.split('/').pop()),
   params: {
     modelAlias: model,

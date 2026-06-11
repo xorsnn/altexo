@@ -5,6 +5,9 @@ import { parse as parseYaml } from 'yaml';
 import { generateVideo, saveVideos } from '../src/veo.js';
 import { makeOutDir } from '../src/out-dir.js';
 import { MODELS, priceVideo } from '../src/models.js';
+import { loadLocalEnv } from '../src/env.js';
+
+loadLocalEnv(); // CLI mode: pull keys from the package-local .env
 
 const promptFile = process.argv[2];
 if (!promptFile) {

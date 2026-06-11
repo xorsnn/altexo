@@ -6,15 +6,19 @@
   "author": "Sergei Grigorev",
   "type": "module",
   "main": "./src/index.js",
+  "types": "./src/index.d.ts",
   "exports": {
-    ".": "./src/index.js",
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
     "altexo-ai-gen": "bin/altexo-ai-gen.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.3"
   },
   "keywords": [
     "ai",

@@ -56,7 +56,9 @@ scripts refuse to run without it (see [`prompts/_schema.md`](prompts/_schema.md)
 ## Library usage
 
 The package is embeddable — import from the package root (deep `src/*` imports
-are not part of the contract):
+are not part of the contract). TypeScript declarations ship with the package.
+Importing has **no side effects**: no `.env` loading, no `process.env`
+mutation (only the CLI entry points read the package-local `.env`).
 
 ```js
 import { generateImage, MissingKeyError, SafetyBlockError } from '@altexo/ai-gen';
@@ -64,25 +66,40 @@ import { generateImage, MissingKeyError, SafetyBlockError } from '@altexo/ai-gen
 const { images, modelId, costEstimate } = await generateImage({
   prompt: 'a lighthouse at dusk, volumetric fog',
   aspect: '9:16',
-  references: ['/tmp/parent-frame.png'], // read from disk
+  references: ['/tmp/parent-frame.png'], // read from disk — server-trusted paths only
   numberOfImages: 3,
   apiKey: userKey,                        // per-call; falls back to GEMINI_API_KEY
   signal: controller.signal,              // optional AbortSignal
-  timeoutMs: 120_000,                     // default; bounds a hung request
+  timeoutMs: 120_000,                     // default; 0 disables the bound
 });
 // images: [{ mimeType, data: Buffer }]
 ```
 
 The library **throws, never calls `process.exit`** — safe to embed in a server.
-Failures carry a stable `code` for programmatic handling: `missing-key`
-(no/invalid key), `safety-block` (model returned zero images — rephrase and
-retry), `rate-limit` (HTTP 429 — back off), `network` (transport/5xx — retry),
-`unknown` (anything else, wrapped as `AiGenError`). Caller aborts and timeouts
-pass through unwrapped (`err.name === 'AbortError' | 'TimeoutError'`).
+`generateImage` failures carry a stable `code` for programmatic handling:
+`missing-key` (no/invalid key), `invalid-input` (unknown model, unreadable
+reference, bad count — deterministic, don't retry unchanged), `safety-block`
+(model returned zero images — rephrase and retry), `rate-limit` (HTTP 429 —
+back off), `network` (transport/5xx — retry), `unknown` (anything else,
+wrapped as `AiGenError`). Caller aborts and timeouts surface unwrapped
+(`err.name === 'AbortError' | 'TimeoutError'`) — the library recovers the
+distinction even though the underlying SDK drops abort reasons.
 
-Also exported: `saveImages`, `MODELS`, `priceImage`, `priceVideo`, and the
-error classes. The video generators (Veo, Kling) are CLI-first and not yet on
-the library surface.
+Trust boundaries: `references` paths are read from disk and sent to the
+provider — never wire raw user input into them. `saveImages(images, outDir,
+prefix)` creates `outDir` if missing; `outDir` must be server-trusted and
+`prefix` must be a bare file-name fragment (path separators are rejected).
+`saveImages` filesystem failures are raw Node errors, not taxonomy errors.
+
+**Next.js embedders:** add `serverExternalPackages: ['@altexo/ai-gen']` to
+`next.config.js`. The model registry is read from a packaged JSON at runtime
+via `import.meta.url`-relative paths, which breaks if the bundler inlines the
+package.
+
+Also exported: `saveImages`, `extractImages`, `MODELS`, `priceImage`,
+`priceVideo`, `estimateImageCost`, and the error classes. Off the surface
+until hardened to the same contract: the video generators (Veo, Kling) and the
+OpenAI image generator.
 
 ## Configuration
 

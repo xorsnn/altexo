@@ -52,3 +52,11 @@ export function priceVideo(model, seconds) {
   if (m.pricing.perSecond != null) return m.pricing.perSecond * seconds;
   return m.pricing[seconds] ?? null;
 }
+
+// Single source of truth for "what does this batch cost" — used by the
+// library return shape (generateImage's costEstimate) and the CLI manifests
+// alike, so the rounding and resolution handling can never drift apart.
+export function estimateImageCost(model, count, resolution = '2K') {
+  const unit = priceImage(model, resolution) ?? 0;
+  return Number((unit * count).toFixed(3));
+}
