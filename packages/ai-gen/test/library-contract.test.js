@@ -12,9 +12,14 @@
 //   - The package root is importable via the exports map.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, writeFile, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { generateImage, extractImages } from '../src/nano-banana.js';
-import { requireEnv } from '../src/env.js';
+import { generateImage, extractImages, saveImages } from '../src/nano-banana.js';
+import { requireEnv, optionalEnv } from '../src/env.js';
 import { MODELS, priceImage } from '../src/models.js';
 import {
   AiGenError,
@@ -208,4 +213,70 @@ test('package root import (exports map) exposes the full library surface', async
   }
   assert.equal(typeof api.generateImage, 'function');
   assert.ok(api.MODELS['nano-banana']);
+});
+
+// --- references / mimeFor (regression: error type changed Error → AiGenError) -
+
+test('references are read from disk into inlineData parts, prompt text last', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'aigen-ref-'));
+  const refPath = join(dir, 'parent-frame.png');
+  const refBytes = Buffer.from('parent-frame-png-bytes');
+  await writeFile(refPath, refBytes);
+
+  let seen;
+  const client = fakeClient(async (req) => {
+    seen = req;
+    return responseWith([imagePart]);
+  });
+  await generateImage({
+    prompt: 'vary the lighting',
+    references: [refPath],
+    apiKey: 'k',
+    _client: client,
+  });
+
+  const parts = seen.contents[0].parts;
+  assert.equal(parts.length, 2);
+  assert.equal(parts[0].inlineData.mimeType, 'image/png');
+  assert.equal(parts[0].inlineData.data, refBytes.toString('base64'));
+  assert.deepEqual(parts.at(-1), { text: 'vary the lighting' });
+});
+
+test('unsupported reference extension throws AiGenError (regression: was bare Error)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'aigen-ref-'));
+  const badRef = join(dir, 'ref.gif');
+  await writeFile(badRef, Buffer.from('gif-bytes'));
+
+  const client = fakeClient(async () => responseWith([imagePart]));
+  await assert.rejects(
+    generateImage({ prompt: 'x', references: [badRef], apiKey: 'k', _client: client }),
+    (e) => {
+      assert.ok(e instanceof AiGenError, 'must be on the taxonomy, not a bare Error');
+      assert.match(e.message, /Unsupported image extension/);
+      return true;
+    }
+  );
+});
+
+// --- CLI missing-key behavior (regression: was clean exit(1), now uncaught throw)
+
+test('CLI script with missing key exits non-zero with the MissingKeyError message', () => {
+  const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  // GEMINI_API_KEY='' (not deleted): dotenv never overrides an already-set var,
+  // so a developer's package-local .env cannot leak a real key into this child
+  // and turn an offline test into a billable API call. requireEnv treats '' as
+  // missing, which is the path under test.
+  const res = spawnSync(
+    process.execPath,
+    ['scripts/gen-image.js', 'prompts/_smoketest.flash.yaml'],
+    {
+      cwd: pkgRoot,
+      env: { ...process.env, GEMINI_API_KEY: '' },
+      encoding: 'utf8',
+      timeout: 30_000,
+    }
+  );
+  assert.equal(res.status, 1, `expected exit 1, got ${res.status}\nstderr: ${res.stderr}`);
+  assert.match(res.stderr, /MissingKeyError/);
+  assert.match(res.stderr, /Missing required env var: GEMINI_API_KEY/);
 });
