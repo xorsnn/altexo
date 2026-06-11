@@ -280,3 +280,111 @@ test('CLI script with missing key exits non-zero with the MissingKeyError messag
   assert.match(res.stderr, /MissingKeyError/);
   assert.match(res.stderr, /Missing required env var: GEMINI_API_KEY/);
 });
+
+// --- remaining coverage gaps ------------------------------------------------
+
+test('env-key fallback: GEMINI_API_KEY set, no per-call key → call proceeds', async () => {
+  const saved = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'env-key';
+  try {
+    const client = fakeClient(async () => responseWith([imagePart]));
+    const result = await generateImage({ prompt: 'x', _client: client });
+    assert.equal(result.images.length, 1);
+  } finally {
+    if (saved !== undefined) process.env.GEMINI_API_KEY = saved;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('requireEnv returns the value when the var is set', () => {
+  process.env.AI_GEN_TEST_SET = 'present';
+  try {
+    assert.equal(requireEnv('AI_GEN_TEST_SET'), 'present');
+  } finally {
+    delete process.env.AI_GEN_TEST_SET;
+  }
+});
+
+test('optionalEnv: value, fallback on unset, fallback on empty string', () => {
+  process.env.AI_GEN_TEST_OPT = 'val';
+  try {
+    assert.equal(optionalEnv('AI_GEN_TEST_OPT'), 'val');
+  } finally {
+    delete process.env.AI_GEN_TEST_OPT;
+  }
+  assert.equal(optionalEnv('AI_GEN_TEST_OPT', 'fb'), 'fb');
+  process.env.AI_GEN_TEST_OPT = '';
+  try {
+    assert.equal(optionalEnv('AI_GEN_TEST_OPT', 'fb'), 'fb');
+  } finally {
+    delete process.env.AI_GEN_TEST_OPT;
+  }
+});
+
+test('caller signal + timeout combine via AbortSignal.any; caller abort propagates', async () => {
+  const controller = new AbortController();
+  let seen;
+  const client = fakeClient(async (req) => {
+    seen = req;
+    return responseWith([imagePart]);
+  });
+  await generateImage({ prompt: 'x', apiKey: 'k', signal: controller.signal, _client: client });
+
+  const combined = seen.config.abortSignal;
+  assert.ok(combined instanceof AbortSignal);
+  assert.notEqual(combined, controller.signal, 'combined signal, not the caller signal itself');
+  assert.equal(combined.aborted, false);
+  controller.abort();
+  assert.equal(combined.aborted, true, 'caller abort must propagate through the combined signal');
+});
+
+test('timeoutMs: 0 disables the bound — caller signal passes through, no httpOptions', async () => {
+  const controller = new AbortController();
+  let seen;
+  const client = fakeClient(async (req) => {
+    seen = req;
+    return responseWith([imagePart]);
+  });
+  await generateImage({ prompt: 'x', apiKey: 'k', signal: controller.signal, timeoutMs: 0, _client: client });
+
+  assert.equal(seen.config.abortSignal, controller.signal, 'single-signal path returns the signal itself');
+  assert.equal(seen.config.httpOptions, undefined);
+});
+
+test('safety-block reason falls back: finishReason, then generic message', async () => {
+  const finishReason = fakeClient(async () => ({
+    candidates: [{ content: { parts: [] }, finishReason: 'IMAGE_SAFETY' }],
+  }));
+  await assert.rejects(
+    generateImage({ prompt: 'x', apiKey: 'k', _client: finishReason }),
+    (e) => e instanceof SafetyBlockError && /IMAGE_SAFETY/.test(e.message)
+  );
+
+  const bare = fakeClient(async () => ({}));
+  await assert.rejects(
+    generateImage({ prompt: 'x', apiKey: 'k', _client: bare }),
+    (e) => e instanceof SafetyBlockError && /no image data in response/.test(e.message)
+  );
+});
+
+test('classifyError: message-only network match and API_KEY_INVALID literal', () => {
+  // No status, no syscall code anywhere — only the message regex can decide.
+  assert.equal(classifyError(new TypeError('fetch failed')).code, 'network');
+  assert.equal(classifyError(new Error('socket hang up')).code, 'network');
+  assert.equal(classifyError(new Error('[400] API_KEY_INVALID: check credentials')).code, 'missing-key');
+});
+
+test('saveImages writes one file per image, extension from mime, png fallback', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'aigen-save-'));
+  const images = [
+    { mimeType: 'image/jpeg', data: Buffer.from('jpeg-bytes') },
+    { data: Buffer.from('mystery-bytes') }, // no mimeType → png fallback
+  ];
+  const paths = await saveImages(images, dir, 'tile');
+  assert.deepEqual(
+    paths.map((p) => p.split('/').pop()),
+    ['tile-01.jpeg', 'tile-02.png']
+  );
+  assert.deepEqual(await readFile(paths[0]), Buffer.from('jpeg-bytes'));
+  assert.deepEqual(await readFile(paths[1]), Buffer.from('mystery-bytes'));
+});
