@@ -70,7 +70,9 @@ Naming convention:
   `2026-05-13_style-test`. The underscore prefix signals "not a real project."
 
 Validation: project name must match `/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/`. The scripts
-refuse to run if `project:` is missing or invalid.
+refuse to start if `project:` is missing. An *invalid* name is rejected when the
+output dir is created — for `pipeline` that's before generation, but for
+image/Veo/Kling it's after the paid call, so get the name right up front.
 
 ## Pipeline prompt (image -> video chain)
 

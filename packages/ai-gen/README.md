@@ -10,6 +10,8 @@ It's a cheaper, reproducible alternative to canvas-style aggregators when you ru
 the **same template many times** — every call is scripted from a small YAML file,
 so a shot is re-runnable and diff-able instead of hand-clicked.
 
+Release notes live in [`CHANGELOG.md`](CHANGELOG.md).
+
 ## Install
 
 ```bash
@@ -25,7 +27,7 @@ cd packages/ai-gen
 cp .env.example .env     # fill in your keys
 ```
 
-Node >= 20.
+Node >= 20.3.
 
 ## Quickstart
 
@@ -53,12 +55,69 @@ scannable at a glance. Every prompt YAML must declare a `project:` field — the
 scripts refuse to run without it (see [`prompts/_schema.md`](prompts/_schema.md)).
 `out/` is gitignored.
 
+## Library usage
+
+The package is embeddable — import from the package root (deep `src/*` imports
+are not part of the contract). TypeScript declarations ship with the package.
+Importing loads **no `.env`** and never mutates `process.env` (only the CLI
+entry points read the package-local `.env`). The one thing that happens at
+import time is a synchronous read of the packaged model-registry JSON — so a
+bad `AI_GEN_MODELS_CONFIG` path throws immediately instead of mispricing later.
+
+```js
+import { generateImage, MissingKeyError, SafetyBlockError } from '@altexo/ai-gen';
+
+const { images, modelId, costEstimate } = await generateImage({
+  prompt: 'a lighthouse at dusk, volumetric fog',
+  aspect: '9:16',
+  references: ['/tmp/parent-frame.png'], // read from disk — server-trusted paths only
+  numberOfImages: 3,
+  apiKey: userKey,                        // per-call; falls back to GEMINI_API_KEY
+  signal: controller.signal,              // optional AbortSignal
+  timeoutMs: 120_000,                     // default; 0 disables the bound
+});
+// images: [{ mimeType, data: Buffer }]
+```
+
+The library **throws, never calls `process.exit`** — safe to embed in a server.
+`generateImage` failures carry a stable `code` for programmatic handling:
+`missing-key` (no/invalid key), `invalid-input` (unknown model, unreadable
+reference, bad count — deterministic, don't retry unchanged), `safety-block`
+(model returned zero images — rephrase and retry), `rate-limit` (HTTP 429 —
+back off), `network` (transport/5xx — retry), `unknown` (anything else,
+wrapped as `AiGenError`). Caller aborts and timeouts surface unwrapped
+(`err.name === 'AbortError' | 'TimeoutError'`) — the library recovers the
+distinction even though the underlying SDK drops abort reasons.
+
+Trust boundaries: `references` paths are read from disk and sent to the
+provider — never wire raw user input into them (the reads are bounded by the
+same abort/timeout as the provider call). `saveImages(images, outDir, prefix)`
+creates `outDir` if missing; `outDir` must be server-trusted and `prefix` must
+be a bare file-name fragment (path separators are rejected). File names are
+deterministic, so a reused `outDir` fails loudly (`wx`) instead of silently
+overwriting a sibling generation. `saveImages` filesystem failures are raw
+Node errors, not taxonomy errors, and all writes have settled before it
+returns or throws.
+
+**Next.js embedders:** add `serverExternalPackages: ['@altexo/ai-gen']` to
+`next.config.js`. The model registry is read from a packaged JSON at runtime
+via `import.meta.url`-relative paths, which breaks if the bundler inlines the
+package.
+
+Also exported: `saveImages`, `extractImages`, `MODELS`, `priceImage`,
+`priceVideo`, `estimateImageCost`, `classifyError`, and the error classes. Off the surface
+until hardened to the same contract: the video generators (Veo, Kling) and the
+OpenAI image generator.
+
 ## Configuration
 
 The toolkit runs from config — nothing is hardcoded to a particular machine or repo.
 
-**API keys.** `src/env.js` loads `.env` from the package root if present; values
-already in your shell environment take precedence. Required:
+**API keys.** The CLI loads `.env` if present — package-local when run from a
+clone, from your current directory when installed via npm/`npx` (that's where
+`altexo-ai-gen init` writes it). The library never loads `.env` — pass `apiKey`
+per call or set the env vars yourself. Values already in your shell environment
+take precedence. Required:
 
 - `GEMINI_API_KEY` — Nano Banana + Veo — <https://aistudio.google.com/apikey>
 - `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` — Kling — <https://app.klingai.com/global/dev/account>
@@ -84,8 +143,10 @@ surfaces immediately rather than silently mispricing.
 AI_GEN_MODELS_CONFIG=./my-models.json npm run kling -- prompts/example.kling.yaml
 ```
 
-**Output root.** Defaults to `./out`. Set `AI_GEN_OUT_ROOT` (absolute, or relative
-to cwd) to write elsewhere.
+**Output root.** Defaults to the package's own `out/` directory — that is
+`./out` when you work from a clone's package root, but for npm/`npx` installs
+it lands inside the installed package copy. Set `AI_GEN_OUT_ROOT` (absolute, or
+relative to cwd) to write elsewhere — recommended for installed use.
 
 ## Prompt files
 

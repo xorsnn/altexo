@@ -4,6 +4,84 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-06-11
+
+Library hardening: the package is now safe to embed in a long-lived server
+(previously CLI-only semantics could kill the host process).
+
+### Added
+
+- **Stable library surface.** `package.json` gains `main`, `types`, and an
+  `exports` map (`.` → `src/index.js` + `src/index.d.ts`); import
+  `generateImage`, `saveImages`, `extractImages`, `MODELS`, `priceImage`,
+  `priceVideo`, `estimateImageCost`, and the error classes from the package
+  root. Deep `src/*` imports are no longer part of the contract. Importing
+  loads no `.env` and mutates no `process.env` (CLI entry points load it via
+  the `src/cli-env.js` first-import, which calls the new `loadLocalEnv()`
+  before env-reading modules evaluate). Off the surface until hardened: Veo, Kling,
+  and the OpenAI image generator.
+- **TypeScript declarations** (`src/index.d.ts`) — the option/return shapes
+  and the literal error-code union are compile-time checked for embedders.
+- **Per-call `apiKey`** on `generateImage` — falls back to `GEMINI_API_KEY`.
+  An explicit empty/non-string `apiKey` throws `MissingKeyError` before any
+  I/O instead of slipping past the env fallback into the SDK.
+- **Abort + timeout.** `generateImage({ signal, timeoutMs })` — caller's
+  `AbortSignal` is honored, and a default 120s bound (cleared the moment the
+  call settles) stops a hung request from pinning the caller. Aborts/timeouts
+  surface unwrapped (`err.name === 'AbortError'/'TimeoutError'`); the library
+  recovers the distinction from its own signals because `@google/genai` wraps
+  abort signals and drops their reasons.
+- **Structured error taxonomy** (`src/errors.js`): `AiGenError` with stable
+  `code` — `missing-key`, `invalid-input` (unknown model, unreadable/bad
+  reference, bad count — deterministic caller errors), `safety-block` (model
+  returned zero images), `rate-limit` (429), `network` (transport/5xx),
+  `unknown` fallback. `classifyError()` maps raw SDK/fetch failures onto it
+  and structurally recognizes taxonomy errors from a second module copy
+  (linked + published coexisting).
+- Offline contract test suite (`test/library-contract.test.js`): throw-not-exit
+  regression, per-call key, return shape, taxonomy mapping, abort/timeout
+  recovery through an SDK-faithful fake, reference handling, CLI exit, input
+  validation, exports-map self-import.
+
+### Changed
+
+- **`requireEnv` throws `MissingKeyError` instead of `console.error` +
+  `process.exit(1)`** — the regression that motivated this release: an embedded
+  missing/rotated key must not take down the host server. CLI scripts now exit
+  non-zero via the uncaught throw (message first, then stack).
+- **`generateImage` returns the stable shape
+  `{ images: [{ mimeType, data }], modelId, costEstimate }`** — `raw` (the
+  full provider payload) is no longer returned; `costEstimate` comes from the
+  shared `estimateImageCost()` helper (also used by the CLI manifest, so the
+  two can't drift). Zero images now throws `SafetyBlockError`; the provider
+  may legitimately return fewer images than requested — that is a success and
+  cost reflects the actual count.
+- The Gemini backend is pinned (`vertexai: false`) so ambient
+  `GOOGLE_GENAI_USE_VERTEXAI` in a host environment cannot reroute calls.
+- Provider HTTP statuses route onto the taxonomy: 401/403 → `missing-key`
+  (a revoked key must not look retryable), 400 → `invalid-input`, 5xx →
+  `network`.
+- Structural caller input (model alias and kind, image count, `timeoutMs`,
+  `signal`, `apiKey` shape) is validated before the key is resolved and before
+  any I/O — a bad model alias on an unconfigured host reports `invalid-input`,
+  not `missing-key`. Validation now also covers `timeoutMs` (NaN previously
+  disabled the hang guard silently; negative fired instantly), non-AbortSignal
+  `signal` values, and video-model aliases passed to `generateImage`.
+- Reference images are read in parallel, bounded by the same abort/timeout as
+  the provider call, and failures surface as `invalid-input` taxonomy errors
+  (previously a raw `ENOENT` escaped the contract). Unknown model aliases
+  throw `invalid-input` instead of a `TypeError`.
+- `saveImages` creates `outDir` if missing, writes in parallel with `wx`
+  (a reused `outDir` fails loudly instead of silently overwriting a sibling
+  generation), settles every write before returning or throwing, derives
+  extensions through the mime allowlist (provider-controlled `mimeType` no
+  longer lands raw in filenames), and rejects path-traversing prefixes.
+- The image CLI scripts (`gen-image`, `gen-pipeline`) validate the model alias
+  before use (previously a raw `TypeError` preempted the library's error). The
+  video scripts (`gen-veo`, `gen-kling`) don't yet — same TypeError as before
+  on a bad alias.
+- `engines.node` raised to `>=20.3` (`AbortSignal.any`).
+
 ## [0.4.0] - 2026-06-07
 
 ### Added

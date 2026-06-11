@@ -6,6 +6,7 @@
 //
 // Reuse the printed id in a kling prompt YAML:
 //   element_ids: [<id>]      # and reference <<<element_1>>> in the prompt
+import '../src/cli-env.js'; // FIRST import: loads .env before env-reading modules evaluate
 import { resolve } from 'node:path';
 import { createElement } from '../src/kling-elements.js';
 

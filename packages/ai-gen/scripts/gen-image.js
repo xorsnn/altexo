@@ -1,10 +1,11 @@
 #!/usr/bin/env node
+import '../src/cli-env.js'; // FIRST import: loads .env before env-reading modules evaluate
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { generateImage, saveImages } from '../src/nano-banana.js';
 import { makeOutDir } from '../src/out-dir.js';
-import { MODELS, priceImage } from '../src/models.js';
+import { MODELS, estimateImageCost } from '../src/models.js';
 
 const promptFile = process.argv[2];
 if (!promptFile) {
@@ -24,6 +25,10 @@ if (!yaml.project) {
 const project = yaml.project;
 const slug = yaml.slug || 'unnamed';
 const model = yaml.model || 'nano-banana';
+if (!MODELS[model]) {
+  console.error(`[${slug}] unknown model alias: ${model} (known: ${Object.keys(MODELS).join(', ')})`);
+  process.exit(1);
+}
 const aspect = yaml.aspect || '9:16';
 const numberOfImages = yaml.count || 1;
 const references = (yaml.references || []).map(p => resolve(process.cwd(), p));
@@ -42,14 +47,13 @@ const elapsed = Number(((Date.now() - t0) / 1000).toFixed(1));
 const outDir = await makeOutDir(project, slug, model);
 const saved = await saveImages(images, outDir);
 
-const unitCost = priceImage(model, yaml.resolution || '2K') ?? 0;
 const manifest = {
   project,
   slug,
   promptFile,
   generatedAt: new Date().toISOString(),
   elapsedSeconds: elapsed,
-  costEstimateUSD: Number((unitCost * images.length).toFixed(3)),
+  costEstimateUSD: estimateImageCost(model, images.length, yaml.resolution || '2K'),
   outputs: saved.map(p => p.split('/').pop()),
   params: {
     modelAlias: model,

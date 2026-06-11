@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import '../src/cli-env.js'; // FIRST import: loads .env before env-reading modules evaluate
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
@@ -29,6 +30,12 @@ const imgCfg = cfg.image;
 const vidCfg = cfg.video;
 const imgModel = imgCfg.model || 'nano-banana';
 const vidModel = vidCfg.model || 'veo-fast';
+for (const m of [imgModel, vidModel]) {
+  if (!MODELS[m]) {
+    console.error(`[${slug}] unknown model alias: ${m} (known: ${Object.keys(MODELS).join(', ')})`);
+    process.exit(1);
+  }
+}
 const aspect = cfg.aspect || imgCfg.aspect || '9:16';
 
 const outDir = await makeOutDir(project, slug, `${imgModel}+${vidModel}`);

@@ -8,7 +8,7 @@ share this monorepo for config and release. MIT licensed.
 
 | Package | Status | What it does |
 | ------- | ------ | ------------ |
-| [`@altexo/ai-gen`](packages/ai-gen) | available | Direct-API CLI + library for AI image/video generation (Nano Banana Pro, Veo 3.1, Kling 3). Cheaper, reproducible alternative to aggregators for repeated templates. |
+| [`@altexo/ai-gen`](packages/ai-gen) | available | Direct-API CLI + library for AI image/video generation (Nano Banana Pro, Veo 3.1, Kling 3, OpenAI gpt-image-1). Cheaper, reproducible alternative to aggregators for repeated templates. |
 | `@altexo/blender` | planned | Scripts for authoring scenes and rendering video with Blender headless. |
 | `@altexo/skills` | planned | Reusable agent skills / slash-commands for the media workflow. |
 
@@ -20,6 +20,9 @@ npm install @altexo/ai-gen
 npx @altexo/ai-gen --help
 ```
 
+New here? [`BOOTSTRAP.md`](BOOTSTRAP.md) takes you (or an AI coding agent) from
+nothing to a first generated image, one shell command at a time.
+
 ## Work on the whole repo
 
 ```bash
@@ -29,7 +32,8 @@ npm install          # installs all workspaces
 npm test             # runs each package's tests
 ```
 
-This is an npm-workspaces monorepo (`packages/*`). Node >= 20.
+This is an npm-workspaces monorepo (`packages/*`). Node >= 20.3
+(`@altexo/ai-gen` uses `AbortSignal.any`).
 
 ## License
 

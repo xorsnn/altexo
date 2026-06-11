@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import '../src/cli-env.js'; // FIRST import: loads .env before env-reading modules evaluate
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
