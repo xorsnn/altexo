@@ -15,10 +15,10 @@ Library hardening: the package is now safe to embed in a long-lived server
   `exports` map (`.` → `src/index.js` + `src/index.d.ts`); import
   `generateImage`, `saveImages`, `extractImages`, `MODELS`, `priceImage`,
   `priceVideo`, `estimateImageCost`, and the error classes from the package
-  root. Deep `src/*` imports are no longer part of the contract. Importing is
-  side-effect-free (no `.env` load — CLI entry points load it via the
-  `src/cli-env.js` first-import, which calls the new `loadLocalEnv()` before
-  env-reading modules evaluate). Off the surface until hardened: Veo, Kling,
+  root. Deep `src/*` imports are no longer part of the contract. Importing
+  loads no `.env` and mutates no `process.env` (CLI entry points load it via
+  the `src/cli-env.js` first-import, which calls the new `loadLocalEnv()`
+  before env-reading modules evaluate). Off the surface until hardened: Veo, Kling,
   and the OpenAI image generator.
 - **TypeScript declarations** (`src/index.d.ts`) — the option/return shapes
   and the literal error-code union are compile-time checked for embedders.
@@ -61,8 +61,9 @@ Library hardening: the package is now safe to embed in a long-lived server
 - Provider HTTP statuses route onto the taxonomy: 401/403 → `missing-key`
   (a revoked key must not look retryable), 400 → `invalid-input`, 5xx →
   `network`.
-- All caller input is validated before the key is resolved and before any
-  I/O — a bad model alias on an unconfigured host reports `invalid-input`,
+- Structural caller input (model alias and kind, image count, `timeoutMs`,
+  `signal`, `apiKey` shape) is validated before the key is resolved and before
+  any I/O — a bad model alias on an unconfigured host reports `invalid-input`,
   not `missing-key`. Validation now also covers `timeoutMs` (NaN previously
   disabled the hang guard silently; negative fired instantly), non-AbortSignal
   `signal` values, and video-model aliases passed to `generateImage`.

@@ -20,6 +20,9 @@ npm install @altexo/ai-gen
 npx @altexo/ai-gen --help
 ```
 
+New here? [`BOOTSTRAP.md`](BOOTSTRAP.md) takes you (or an AI coding agent) from
+nothing to a first generated image, one shell command at a time.
+
 ## Work on the whole repo
 
 ```bash

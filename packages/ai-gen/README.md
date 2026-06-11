@@ -10,6 +10,8 @@ It's a cheaper, reproducible alternative to canvas-style aggregators when you ru
 the **same template many times** — every call is scripted from a small YAML file,
 so a shot is re-runnable and diff-able instead of hand-clicked.
 
+Release notes live in [`CHANGELOG.md`](CHANGELOG.md).
+
 ## Install
 
 ```bash
@@ -57,8 +59,10 @@ scripts refuse to run without it (see [`prompts/_schema.md`](prompts/_schema.md)
 
 The package is embeddable — import from the package root (deep `src/*` imports
 are not part of the contract). TypeScript declarations ship with the package.
-Importing has **no side effects**: no `.env` loading, no `process.env`
-mutation (only the CLI entry points read the package-local `.env`).
+Importing loads **no `.env`** and never mutates `process.env` (only the CLI
+entry points read the package-local `.env`). The one thing that happens at
+import time is a synchronous read of the packaged model-registry JSON — so a
+bad `AI_GEN_MODELS_CONFIG` path throws immediately instead of mispricing later.
 
 ```js
 import { generateImage, MissingKeyError, SafetyBlockError } from '@altexo/ai-gen';
@@ -139,8 +143,10 @@ surfaces immediately rather than silently mispricing.
 AI_GEN_MODELS_CONFIG=./my-models.json npm run kling -- prompts/example.kling.yaml
 ```
 
-**Output root.** Defaults to `./out`. Set `AI_GEN_OUT_ROOT` (absolute, or relative
-to cwd) to write elsewhere.
+**Output root.** Defaults to the package's own `out/` directory — that is
+`./out` when you work from a clone's package root, but for npm/`npx` installs
+it lands inside the installed package copy. Set `AI_GEN_OUT_ROOT` (absolute, or
+relative to cwd) to write elsewhere — recommended for installed use.
 
 ## Prompt files
 
