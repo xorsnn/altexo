@@ -16,8 +16,9 @@ Library hardening: the package is now safe to embed in a long-lived server
   `generateImage`, `saveImages`, `extractImages`, `MODELS`, `priceImage`,
   `priceVideo`, `estimateImageCost`, and the error classes from the package
   root. Deep `src/*` imports are no longer part of the contract. Importing is
-  side-effect-free (no `.env` load — CLI entry points call the new
-  `loadLocalEnv()` explicitly). Off the surface until hardened: Veo, Kling,
+  side-effect-free (no `.env` load — CLI entry points load it via the
+  `src/cli-env.js` first-import, which calls the new `loadLocalEnv()` before
+  env-reading modules evaluate). Off the surface until hardened: Veo, Kling,
   and the OpenAI image generator.
 - **TypeScript declarations** (`src/index.d.ts`) — the option/return shapes
   and the literal error-code union are compile-time checked for embedders.

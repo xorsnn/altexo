@@ -18,8 +18,8 @@ guess at the fix — do not retry blindly or invent keys.
 
 ## Steps
 
-1. **Check Node ≥ 20.** Run `node --version`. If it's older or missing, tell the
-   user to install Node 20+ (https://nodejs.org) and stop.
+1. **Check Node ≥ 20.3.** Run `node --version`. If it's older or missing, tell the
+   user to install Node 20.3+ (https://nodejs.org) and stop.
 
 2. **Pick an install path.**
    - *Quick trial (one image):* nothing to install — use `npx @altexo/ai-gen`.

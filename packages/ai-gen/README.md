@@ -25,7 +25,7 @@ cd packages/ai-gen
 cp .env.example .env     # fill in your keys
 ```
 
-Node >= 20.
+Node >= 20.3.
 
 ## Quickstart
 
@@ -101,7 +101,7 @@ via `import.meta.url`-relative paths, which breaks if the bundler inlines the
 package.
 
 Also exported: `saveImages`, `extractImages`, `MODELS`, `priceImage`,
-`priceVideo`, `estimateImageCost`, and the error classes. Off the surface
+`priceVideo`, `estimateImageCost`, `classifyError`, and the error classes. Off the surface
 until hardened to the same contract: the video generators (Veo, Kling) and the
 OpenAI image generator.
 
@@ -109,8 +109,9 @@ OpenAI image generator.
 
 The toolkit runs from config — nothing is hardcoded to a particular machine or repo.
 
-**API keys.** `src/env.js` loads `.env` from the package root if present; values
-already in your shell environment take precedence. Required:
+**API keys.** The CLI entry points load `.env` from the package root if present
+(the library never does — pass `apiKey` per call or set the env vars yourself);
+values already in your shell environment take precedence. Required:
 
 - `GEMINI_API_KEY` — Nano Banana + Veo — <https://aistudio.google.com/apikey>
 - `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` — Kling — <https://app.klingai.com/global/dev/account>

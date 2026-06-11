@@ -29,7 +29,8 @@ npm install          # installs all workspaces
 npm test             # runs each package's tests
 ```
 
-This is an npm-workspaces monorepo (`packages/*`). Node >= 20.
+This is an npm-workspaces monorepo (`packages/*`). Node >= 20.3
+(`@altexo/ai-gen` uses `AbortSignal.any`).
 
 ## License
 
