@@ -6,7 +6,7 @@ import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { MODELS, priceImage, priceVideo } from '../src/models.js';
+import { MODELS, priceImage, priceVideo, estimateVideoCost } from '../src/models.js';
 
 const approx = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} !~= ${b}`);
 
@@ -59,6 +59,13 @@ test('video pricing — all video models bill per-second (Kling 3 over 3-15s)', 
   approx(priceVideo('kling-pro', 15), 1.26);
   approx(priceVideo('kling-master', 5), 0.70);
   approx(priceVideo('kling-std', 5), 0.21);
+});
+
+test('estimateVideoCost rounds, applies the audio multiplier, zeroes unknowns', () => {
+  approx(estimateVideoCost('kling-pro', 5), 0.42);                       // silent
+  approx(estimateVideoCost('kling-pro', 5, { audio: true }), 0.84);      // ×2 audio multiplier
+  approx(estimateVideoCost('kling-std', 5, { audio: true }), 0.21);      // no multiplier declared → ×1
+  assert.equal(estimateVideoCost('does-not-exist', 5), 0);              // unknown → 0, like estimateImageCost
 });
 
 test('unknown model prices to null (no silent zero)', () => {

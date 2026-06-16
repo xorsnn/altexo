@@ -99,15 +99,43 @@ overwriting a sibling generation. `saveImages` filesystem failures are raw
 Node errors, not taxonomy errors, and all writes have settled before it
 returns or throws.
 
+### Video (Kling)
+
+`generateVideo` follows the same contract — validate-before-I/O, per-call keys,
+abort/timeout, the error taxonomy — and submits + polls the Kling task to
+completion (renders take minutes, so the default `timeoutMs` is **600s**):
+
+```js
+import { generateVideo, saveVideo } from '@altexo/ai-gen';
+
+const { videoUrl, taskId, costEstimate, durationSeconds } = await generateVideo({
+  prompt: 'slow push-in on the lighthouse, fog rolling',
+  model: 'kling-pro',          // verified 3–15s tier; default is 'kling-master' (5/10s)
+  duration: 5,
+  imagePath: '/tmp/head.png',  // head frame (image-to-video); omit for text-to-video
+  imageTailPath: '/tmp/tail.png', // optional tail frame — requires imagePath
+  accessKey, secretKey,        // per-call; fall back to KLING_ACCESS_KEY / KLING_SECRET_KEY
+  signal: controller.signal,   // cancels submit, polls, and the file reads
+  timeoutMs: 600_000,          // default; 0 disables the bound
+});
+await saveVideo(videoUrl, '/tmp/out'); // downloads to /tmp/out/video-01.mp4
+```
+
+`taskId` is the provider task id — record it to observe or resume a render.
+Cost: `costEstimate` (and the standalone `estimateVideoCost(model, seconds,
+{ audio })`) is `priceVideo` × the model's audio multiplier. Kling renders one
+clip per task; run N calls in parallel for N variants. Failures carry the same
+`code`s as `generateImage`; a content-rejected task surfaces as an `AiGenError`.
+
 **Next.js embedders:** add `serverExternalPackages: ['@altexo/ai-gen']` to
 `next.config.js`. The model registry is read from a packaged JSON at runtime
 via `import.meta.url`-relative paths, which breaks if the bundler inlines the
 package.
 
-Also exported: `saveImages`, `extractImages`, `MODELS`, `priceImage`,
-`priceVideo`, `estimateImageCost`, `classifyError`, and the error classes. Off the surface
-until hardened to the same contract: the video generators (Veo, Kling) and the
-OpenAI image generator.
+Also exported: `saveImages`, `extractImages`, `saveVideo`, `MODELS`,
+`priceImage`, `priceVideo`, `estimateImageCost`, `estimateVideoCost`,
+`classifyError`, and the error classes. Off the surface until hardened to the
+same contract: Veo and the OpenAI image generator.
 
 ## Configuration
 
@@ -203,6 +231,10 @@ with `audio: true` doubles (2× `audioMultiplier`).
 
 ### Kling 3 — `src/kling.js`
 - Kuaishou's official international API at `https://api.klingai.com`.
+- **On the stable library surface as of 0.6.0** — `generateVideo` /
+  `saveVideo` import from the package root and follow the `generateImage`
+  contract (per-call `accessKey`/`secretKey`, `signal`/`timeoutMs`, the error
+  taxonomy, the stable return shape). See "Video (Kling)" under Library usage.
 - Auth: JWT (HS256) signed from `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`; the
   wrapper mints a fresh 30-min token per call via `jsonwebtoken`.
 - Model IDs are best-guess for Kling 3 — if you get `invalid model_name`, open the
