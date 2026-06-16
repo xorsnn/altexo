@@ -60,3 +60,12 @@ export function estimateImageCost(model, count, resolution = '2K') {
   const unit = priceImage(model, resolution) ?? 0;
   return Number((unit * count).toFixed(3));
 }
+
+// The video analog — used by generateVideo's costEstimate and the Kling CLI
+// manifest. Native audio bills at the model's `audioMultiplier` (pro tier);
+// a model without one declared is never charged the multiplier.
+export function estimateVideoCost(model, seconds, { audio = false } = {}) {
+  const base = priceVideo(model, seconds) ?? 0;
+  const multiplier = audio ? (MODELS[model]?.audioMultiplier ?? 1) : 1;
+  return Number((base * multiplier).toFixed(3));
+}

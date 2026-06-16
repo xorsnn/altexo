@@ -6,7 +6,7 @@ import { parse as parseYaml } from 'yaml';
 import { generateVideo, saveVideo } from '../src/kling.js';
 import { createElement } from '../src/kling-elements.js';
 import { makeOutDir } from '../src/out-dir.js';
-import { MODELS, priceVideo } from '../src/models.js';
+import { MODELS, estimateVideoCost } from '../src/models.js';
 
 const promptFile = process.argv[2];
 if (!promptFile) {
@@ -78,8 +78,9 @@ const outDir = await makeOutDir(project, slug, model);
 const saved = await saveVideo(videoUrl, outDir);
 
 // Native audio is billed at a multiplier (pro-tier feature) — see models.default.json.
-const audioMultiplier = audio ? (MODELS[model].audioMultiplier ?? 2) : 1;
-const cost = (priceVideo(model, totalSeconds) ?? 0) * audioMultiplier;
+// estimateVideoCost is the shared helper, so the CLI manifest and the library's
+// generateVideo costEstimate can never drift apart.
+const cost = estimateVideoCost(model, totalSeconds, { audio });
 const manifest = {
   project,
   slug,

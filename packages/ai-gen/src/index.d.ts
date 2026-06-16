@@ -79,6 +79,63 @@ export function saveImages(
 /** Pure parse of a provider response into images. */
 export function extractImages(response: unknown): GeneratedImage[];
 
+export interface MultiShotSegment {
+  prompt: string;
+  /** Segment length in seconds (alias: `duration`). The segments sum to the clip length. */
+  seconds?: number;
+  duration?: number;
+}
+
+export interface GenerateVideoOptions {
+  prompt: string;
+  /** e.g. '9:16' (default), '1:1', '16:9' */
+  aspect?: string;
+  /** Clip length in seconds (default 5). Validated against the model's allowed `durations`. */
+  duration?: number;
+  /** Head frame for image-to-video; omit for text-to-video. Server-trusted path. */
+  imagePath?: string | null;
+  /** Tail frame; requires `imagePath`. Server-trusted path. */
+  imageTailPath?: string | null;
+  /** Kling video alias from MODELS (default 'kling-master'). */
+  model?: string;
+  negativePrompt?: string;
+  /** Native Kling audio (pro tier, single start frame). Billed at the model's audioMultiplier. */
+  audio?: boolean;
+  /** Split one clip into ≤6 prompted segments; their seconds sum to the clip length. */
+  multiShot?: MultiShotSegment[] | null;
+  /** 'customize' (default) honors the list; 'intelligence' auto-storyboards. */
+  shotType?: 'customize' | 'intelligence';
+  /** ≤3 reference-subject ids from createElement(). */
+  elementIds?: string[];
+  /** Per-call Kling access key; falls back to KLING_ACCESS_KEY. */
+  accessKey?: string;
+  /** Per-call Kling secret key; falls back to KLING_SECRET_KEY. */
+  secretKey?: string;
+  /** Cancels the call; surfaces unwrapped with err.name === 'AbortError'. */
+  signal?: AbortSignal;
+  /** Bound on the call in ms (default 600000; 0 disables). Expiry surfaces
+   * unwrapped with err.name === 'TimeoutError'. */
+  timeoutMs?: number;
+}
+
+export interface GenerateVideoResult {
+  /** URL of the rendered clip (download with saveVideo). */
+  videoUrl: string;
+  /** Provider task id — record it to resume/observe the render. */
+  taskId: string;
+  modelId: string;
+  /** USD: priceVideo × audio multiplier. */
+  costEstimate: number;
+  /** Clip length actually rendered (the multi-shot sum, if any). */
+  durationSeconds: number;
+  aspect: string;
+}
+
+export function generateVideo(options: GenerateVideoOptions): Promise<GenerateVideoResult>;
+
+/** Downloads videoUrl to outDir/<prefix>-01.mp4. Returns the written path. */
+export function saveVideo(videoUrl: string, outDir: string, prefix?: string): Promise<string>;
+
 export interface ModelEntry {
   id: string;
   vendor: string;
@@ -91,3 +148,8 @@ export const MODELS: Record<string, ModelEntry>;
 export function priceImage(model: string, resolution?: string): number | null;
 export function priceVideo(model: string, seconds: number): number | null;
 export function estimateImageCost(model: string, count: number, resolution?: string): number;
+export function estimateVideoCost(
+  model: string,
+  seconds: number,
+  opts?: { audio?: boolean }
+): number;

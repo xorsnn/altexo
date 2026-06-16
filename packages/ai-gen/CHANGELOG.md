@@ -4,6 +4,63 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-06-16
+
+Video joins the stable surface: **Kling `generateVideo` is hardened to the same
+embedding contract as `generateImage`** (0.5.0). Safe to call from a long-lived
+server, with per-call keys, cancellation, and the structured error taxonomy.
+
+### Added
+
+- **`generateVideo` and `saveVideo` on the package root.** Import them (and the
+  new `estimateVideoCost`) from `@altexo/ai-gen`. `generateVideo` returns the
+  stable shape `{ videoUrl, taskId, modelId, costEstimate, durationSeconds,
+  aspect }` — the raw provider payload is no longer returned. TypeScript
+  declarations (`GenerateVideoOptions` / `GenerateVideoResult`) ship in
+  `index.d.ts`.
+- **Per-call Kling keys.** `generateVideo({ accessKey, secretKey })` — each
+  falls back to `KLING_ACCESS_KEY` / `KLING_SECRET_KEY`. An explicit
+  empty/non-string value throws `MissingKeyError` before any I/O.
+- **Abort + timeout.** `generateVideo({ signal, timeoutMs })` — the caller's
+  `AbortSignal` cancels the submit, every poll, the inter-poll wait, and the
+  head/tail file reads; a default 600s bound (renders take minutes) stops a hung
+  task from pinning the caller. Aborts/timeouts surface unwrapped (`err.name ===
+  'AbortError' / 'TimeoutError'`), recovered from the library's own signals
+  because `fetch` drops abort reasons.
+- **`estimateVideoCost(model, seconds, { audio })`** — the video analog of
+  `estimateImageCost`; the shared source of truth for `generateVideo`'s
+  `costEstimate` and the Kling CLI manifest, so the two can't drift. Applies the
+  model's `audioMultiplier` when `audio` is set.
+- Offline contract test suite (`test/kling-contract.test.js`): input validation
+  before key/I/O, per-call keys, the stable return shape, taxonomy mapping
+  (429/401/403/400/5xx → rate-limit/missing-key/invalid-input/network),
+  failed-task handling, abort/timeout recovery, and the exports-map self-import —
+  all against a fake `fetch`, no network or keys.
+
+### Changed
+
+- **Kling input validation now throws `InvalidInputError`** (code
+  `invalid-input`) instead of a bare `Error` — unknown/wrong-kind model, a tail
+  frame without a head, >3 elements, a malformed `multiShot`, an out-of-range
+  duration, a bad `signal`/`timeoutMs`. All checks run **before** keys are
+  resolved or any I/O happens.
+- **Kling provider failures map onto the error taxonomy.** The internal `api()`
+  helper attaches the HTTP status so `classifyError` routes them; an unreadable
+  head/tail frame is reported as `invalid-input`, not a raw `ENOENT`.
+- **`submitAndPoll` is cancellation-aware** (`signal`, `keys`, `fetchImpl`,
+  `log`, `pollMs` options, additive — the element/motion deep callers are
+  unaffected) and its inter-poll wait is interruptible. Library calls run quiet
+  (`log: false`); the CLI keeps its submit notice.
+- The Kling CLI (`scripts/gen-kling.js`) bills via `estimateVideoCost` instead
+  of an inline `priceVideo × audioMultiplier`.
+
+### Notes
+
+- **Still off the surface:** Veo (`veo.js`) and the OpenAI image generator
+  (`openai-image.js`). They await the same hardening pass.
+- `generateVideo`'s default model stays `kling-master`; the verified Kling 3.0
+  tiers are `kling-pro` / `kling-std` (3–15s) — pass `model` explicitly.
+
 ## [0.5.0] - 2026-06-11
 
 Library hardening: the package is now safe to embed in a long-lived server
