@@ -34,14 +34,6 @@
     "pricing": { "perSecond": 0.15 },
     "note": "perSecond 0.15 is the audio-ON rate, which is correct for this codepath: src/veo.js generates audio by default. Audio-off Fast is ~0.10-0.12/s."
   },
-  "kling-master": {
-    "vendor": "kling",
-    "id": "kling-v3-master",
-    "kind": "video",
-    "pricing": { "perSecond": 0.14 },
-    "durations": [5, 10],
-    "note": "UNVERIFIED: the official Kling 3.0 model map shows no `kling-v3-master` tier (std/pro/4k only). This id is a best-guess and may be a legacy v2 Master (5/10s) or invalid (`invalid model_name`). Kept at the legacy 5/10 durations; perSecond 0.14 reproduces the prior 5s=$0.70 / 10s=$1.40 points. Master omits the `mode` param. Audio requires pro mode — use kling-pro for sound."
-  },
   "kling-pro": {
     "vendor": "kling",
     "id": "kling-v3",

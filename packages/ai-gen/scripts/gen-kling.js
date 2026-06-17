@@ -24,7 +24,7 @@ if (!yaml.project) {
 }
 const project = yaml.project;
 const slug = yaml.slug || 'unnamed';
-const model = yaml.model || 'kling-master';
+const model = yaml.model || 'kling-std';
 const aspect = yaml.aspect || '9:16';
 const singleDuration = yaml.seconds || 5;
 // Multi-shot: yaml.multi_shot is a list of { prompt, seconds } segments (Kling v3,

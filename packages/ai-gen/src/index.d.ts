@@ -96,7 +96,7 @@ export interface GenerateVideoOptions {
   imagePath?: string | null;
   /** Tail frame; requires `imagePath`. Server-trusted path. */
   imageTailPath?: string | null;
-  /** Kling video alias from MODELS (default 'kling-master'). */
+  /** Kling video alias from MODELS (default 'kling-std'). */
   model?: string;
   negativePrompt?: string;
   /** Native Kling audio (pro tier, single start frame). Billed at the model's audioMultiplier. */
