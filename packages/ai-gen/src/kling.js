@@ -138,7 +138,7 @@ export async function generateVideo({
   duration = 5,
   imagePath = null,
   imageTailPath = null,
-  model = 'kling-master',
+  model = 'kling-std',
   negativePrompt,
   audio = false,
   multiShot = null,

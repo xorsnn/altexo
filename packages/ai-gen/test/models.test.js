@@ -13,7 +13,7 @@ const approx = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} !~=
 test('registry exposes the expected aliases with id/vendor/kind', () => {
   for (const alias of [
     'nano-banana', 'nano-banana-flash', 'gpt-image-1', 'veo', 'veo-fast',
-    'kling-master', 'kling-pro', 'kling-std',
+    'kling-pro', 'kling-std',
   ]) {
     const m = MODELS[alias];
     assert.ok(m, `missing model ${alias}`);
@@ -21,6 +21,9 @@ test('registry exposes the expected aliases with id/vendor/kind', () => {
     assert.equal(typeof m.vendor, 'string');
     assert.ok(m.kind === 'image' || m.kind === 'video');
   }
+  // kling-master was removed: its id 'kling-v3-master' is not a real Kling model
+  // (v3 has std/pro/4k, no master), so Kling 400s on it. Guard against re-adding.
+  assert.equal('kling-master' in MODELS, false);
 });
 
 test('the JSON _comment key is stripped (never looks like a model)', () => {
@@ -43,11 +46,10 @@ test('kling-pro carries a 2x native-audio multiplier', () => {
   approx(priceVideo('kling-pro', 5) * MODELS['kling-pro'].audioMultiplier, 0.84);
 });
 
-test('Kling 3 exposes the 3-15s duration set; legacy master stays 5/10', () => {
+test('Kling 3 exposes the 3-15s duration set', () => {
   const v3 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
   assert.deepEqual(MODELS['kling-pro'].durations, v3);
   assert.deepEqual(MODELS['kling-std'].durations, v3);
-  assert.deepEqual(MODELS['kling-master'].durations, [5, 10]);
 });
 
 test('video pricing — all video models bill per-second (Kling 3 over 3-15s)', () => {
@@ -57,7 +59,6 @@ test('video pricing — all video models bill per-second (Kling 3 over 3-15s)', 
   approx(priceVideo('kling-pro', 10), 0.84);  // ...and the legacy 10s point
   approx(priceVideo('kling-pro', 7), 0.588);  // any 3-15s length now prices linearly
   approx(priceVideo('kling-pro', 15), 1.26);
-  approx(priceVideo('kling-master', 5), 0.70);
   approx(priceVideo('kling-std', 5), 0.21);
 });
 

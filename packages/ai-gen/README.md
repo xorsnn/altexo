@@ -110,7 +110,7 @@ import { generateVideo, saveVideo } from '@altexo/ai-gen';
 
 const { videoUrl, taskId, costEstimate, durationSeconds } = await generateVideo({
   prompt: 'slow push-in on the lighthouse, fog rolling',
-  model: 'kling-pro',          // verified 3–15s tier; default is 'kling-master' (5/10s)
+  model: 'kling-pro',          // verified 3–15s tier; default is 'kling-std'
   duration: 5,
   imagePath: '/tmp/head.png',  // head frame (image-to-video); omit for text-to-video
   imageTailPath: '/tmp/tail.png', // optional tail frame — requires imagePath

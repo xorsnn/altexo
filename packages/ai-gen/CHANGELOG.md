@@ -4,6 +4,23 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-06-17
+
+### Removed
+
+- **`kling-master` model alias.** Its id `kling-v3-master` is not a real Kling
+  model — Kling 3.0 ships Standard / Pro / 4K tiers, with no "master" (that tier
+  exists only on legacy v2/v2.1: `kling-v2-master`, `kling-v2-1-master`). Calling
+  it returned `400 model_name 'kling-v3-master' is invalid`. Removed from the
+  registry, the CLI default, and the type docs rather than re-pointed — the
+  catalog is v3-oriented (`kling-pro` / `kling-std`, both `kling-v3`).
+
+### Changed
+
+- **`generateVideo`'s default model is now `kling-std`** (was the broken
+  `kling-master`). Pass `model: 'kling-pro'` for the premium tier. This is the
+  only behavior change; both tiers support head+tail frames.
+
 ## [0.6.0] - 2026-06-16
 
 Video joins the stable surface: **Kling `generateVideo` is hardened to the same
