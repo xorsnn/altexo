@@ -1,5 +1,4 @@
 import { readFile } from 'node:fs/promises';
-import jwt from 'jsonwebtoken';
 import { requireEnv, optionalEnv } from './env.js';
 import { MODELS, estimateVideoCost } from './models.js';
 import { downloadToFile } from './download.js';
@@ -17,28 +16,26 @@ const BASE_URL = optionalEnv('KLING_BASE_URL', 'https://api.klingai.com');
 const POLL_MS = 8_000;
 const MAX_WAIT_MS = 10 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = MAX_WAIT_MS; // Kling renders take minutes; bound it like generateImage.
-const TOKEN_TTL_SEC = 1800;
 const MAX_SHOTS = 6; // Kling v3 multi-shot caps at 6 segments per the official examples.
 
-// Mint a fresh 30-min JWT per request (a single render polls past one token's
-// TTL). Keys are resolved per-call so an embedder can pass them explicitly;
-// `keys` omitted falls back to the env, preserving the CLI/deep-caller path.
-function makeToken(keys) {
-  const accessKey = keys?.accessKey ?? requireEnv('KLING_ACCESS_KEY');
-  const secretKey = keys?.secretKey ?? requireEnv('KLING_SECRET_KEY');
-  const now = Math.floor(Date.now() / 1000);
-  return jwt.sign(
-    { iss: accessKey, exp: now + TOKEN_TTL_SEC, nbf: now - 5 },
-    secretKey,
-    { algorithm: 'HS256', header: { alg: 'HS256', typ: 'JWT' } },
-  );
+// Resolve the bearer credential. Kling's API key IS the token: it is sent as-is, with no
+// signing step and no expiry to manage. Per-call so an embedder can pass a specific owner's
+// key; omitted falls back to the env, preserving the CLI/deep-caller path.
+//
+// 0.9.0 REPLACED an accessKey/secretKey pair here, which this module used to mint a 30-minute
+// HS256 JWT from. Kling documents that pair as legacy and the console now issues a single API
+// key, so the JWT minter meant asking users for a credential shape they can no longer obtain —
+// they would paste an API key into an "access key" field, invent a secret, and get a 401 that
+// blamed the wrong value. See the CHANGELOG for the upgrade path.
+function bearerToken(keys) {
+  return keys?.apiKey ?? requireEnv('KLING_API_KEY');
 }
 
 async function api(method, path, body, { signal, keys, fetchImpl = fetch } = {}) {
   const res = await fetchImpl(`${BASE_URL}${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${makeToken(keys)}`,
+      Authorization: `Bearer ${bearerToken(keys)}`,
       'Content-Type': 'application/json',
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -123,60 +120,47 @@ const PROBE_TIMEOUT_MS = 8000;
 const PROBE_PATH = '/v1/videos/image2video?pageNum=1&pageSize=1';
 
 // Library contract (stable):
-//   validateKlingKeys({ accessKey, secretKey, signal, timeoutMs })
+//   validateKlingApiKey({ apiKey, signal, timeoutMs })
 //     → { status: 'valid' }
-//     | { status: 'invalid', message }      the provider rejected these credentials
+//     | { status: 'invalid', message }      the provider rejected this credential
 //     | { status: 'unavailable', message }  the provider could not answer right now
 //
-// WHY THIS EXISTS. Kling has no unauthenticated probe — auth is an HS256 JWT signed
-// over the access+secret pair — so a caller who wants to know whether a stored
-// credential still works has, until now, had only one option: submit a real render and
-// see if it fails. That is a paid, minutes-long way to ask a yes/no question, and it
-// pushed every embedder toward either accepting keys unchecked or reimplementing
-// makeToken() and BASE_URL on their own. Both are worse than exporting the check.
+// WHY THIS EXISTS. Kling exposes no unauthenticated probe, so a caller who wants to know
+// whether a stored credential still works had only one option: submit a real render and see
+// if it fails. That is a paid, minutes-long way to ask a yes/no question, and it pushed every
+// embedder toward either accepting keys unchecked or reimplementing the auth and BASE_URL on
+// their own. Both are worse than exporting the check.
 //
-// WHY IT NEVER THROWS. generateVideo throws MissingKeyError on an empty/non-string key,
-// which is right for a render — the caller asked for work that cannot be done. This
-// function's whole job is to ANSWER a question about a credential, so an unusable one is
-// a verdict ('invalid'), not an exception. Callers can treat the result as total and skip
-// the try/catch. This is the one deliberate divergence from the generateVideo contract.
+// WHY IT NEVER THROWS. generateVideo throws MissingKeyError on an empty/non-string key, which
+// is right for a render — the caller asked for work that cannot be done. This function's whole
+// job is to ANSWER a question about a credential, so an unusable one is a verdict ('invalid'),
+// not an exception. Callers can treat the result as total and skip the try/catch. This is the
+// one deliberate divergence from the generateVideo contract.
 //
-// THE THREE-WAY SPLIT IS THE POINT. 'invalid' means the provider looked at these
-// credentials and said no (401/403). 'unavailable' means nobody knows yet — a 5xx, a
-// timeout, a DNS failure, a 429. Callers use this to decide whether to DEMOTE a stored
-// key, and demoting on a provider outage would cost users a credential they would have
-// to go find and paste again. When in doubt this returns 'unavailable', never 'invalid'.
+// THE THREE-WAY SPLIT IS THE POINT. 'invalid' means the provider looked at this credential and
+// said no (401/403). 'unavailable' means nobody knows yet — a 5xx, a timeout, a DNS failure, a
+// 429. Callers use this to decide whether to DEMOTE a stored key, and demoting on a provider
+// outage would cost users a credential they would have to go find and paste again. When in
+// doubt this returns 'unavailable', never 'invalid'.
 //
-// - Keys are per-call ONLY. Unlike generateVideo there is no env fallback: validating
-//   "whatever happens to be in the environment" is not a question anyone means to ask,
-//   and silently probing the host's own key would be a confusing answer.
-// - `signal` (AbortSignal) cancels the probe; `timeoutMs` (default 8s, 0 to disable)
-//   bounds it. Neither surfaces as a throw — both land as 'unavailable'.
-// - The provider's response body is never echoed into `message`; only the status code
-//   is, so a probe result is always safe to log.
+// - The key is per-call ONLY. Unlike generateVideo there is no env fallback: validating
+//   "whatever happens to be in the environment" is not a question anyone means to ask, and
+//   silently probing the host's own key would be a confusing answer.
+// - `signal` (AbortSignal) cancels the probe; `timeoutMs` (default 8s, 0 to disable) bounds
+//   it. Neither surfaces as a throw — both land as 'unavailable'.
+// - The provider's response body is never echoed into `message`; only the status code is, so a
+//   probe result is always safe to log.
 // - `_fetch` is a test seam (injects a fake in place of global fetch). Not public API.
-export async function validateKlingKeys({
-  accessKey,
-  secretKey,
+export async function validateKlingApiKey({
+  apiKey,
   signal,
   timeoutMs = PROBE_TIMEOUT_MS,
   _fetch,
 } = {}) {
-  for (const [name, val] of [['accessKey', accessKey], ['secretKey', secretKey]]) {
-    if (typeof val !== 'string' || val.trim() === '') {
-      return { status: 'invalid', message: `${name} must be a non-empty string` };
-    }
+  if (typeof apiKey !== 'string' || apiKey.trim() === '') {
+    return { status: 'invalid', message: 'apiKey must be a non-empty string' };
   }
-
-  let token;
-  try {
-    token = makeToken({ accessKey, secretKey });
-  } catch {
-    // jsonwebtoken rejects a malformed secret (e.g. a key the signer cannot use) before
-    // any network call. That is the credential failing, not the provider — but never
-    // echo the signer's error, which can quote the secret back.
-    return { status: 'invalid', message: 'the key pair could not be used to sign a request' };
-  }
+  const token = apiKey;
 
   const timeoutCtrl = timeoutMs > 0 ? new AbortController() : null;
   const timer = timeoutCtrl ? setTimeout(() => timeoutCtrl.abort(), timeoutMs) : null;
@@ -211,15 +195,14 @@ export async function validateKlingKeys({
 // Library contract (stable, mirrors generateImage):
 //   generateVideo({ prompt, aspect, duration, imagePath, imageTailPath, model,
 //                   negativePrompt, audio, multiShot, shotType, elementIds,
-//                   accessKey, secretKey, signal, timeoutMs })
+//                   apiKey, signal, timeoutMs })
 //     → { videoUrl, taskId, modelId, costEstimate, durationSeconds, aspect }
 //
 // - All caller input is validated BEFORE keys are resolved and before any I/O,
 //   so a bad call reports its own problem ('invalid-input'), not the host's key
 //   situation ('missing-key').
-// - `accessKey`/`secretKey` are per-call; each falls back to its env var
-//   (KLING_ACCESS_KEY / KLING_SECRET_KEY). An explicit empty/non-string value
-//   throws MissingKeyError before any I/O.
+// - `apiKey` is per-call and falls back to `KLING_API_KEY`. An explicit
+//   empty/non-string value throws MissingKeyError before any I/O.
 // - `signal` (AbortSignal) cancels the call INCLUDING the head/tail file reads
 //   and the poll wait; `timeoutMs` (default 600s — renders take minutes — 0 to
 //   disable) bounds the whole thing. Aborts/timeouts surface unwrapped
@@ -240,8 +223,7 @@ export async function generateVideo({
   multiShot = null,
   shotType = 'customize',
   elementIds = [],
-  accessKey,
-  secretKey,
+  apiKey,
   signal,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   _fetch,
@@ -310,18 +292,15 @@ export async function generateVideo({
     throw new InvalidInputError('Kling: image_tail (tail frame) requires imagePath (head frame) to be set');
   }
 
-  // --- resolve keys (after input is known good) ----------------------------
-  for (const [name, val] of [['accessKey', accessKey], ['secretKey', secretKey]]) {
-    if (val != null && (typeof val !== 'string' || val.trim() === '')) {
-      throw new MissingKeyError(
-        `An explicit ${name} was passed but is empty or not a string. ` +
-          `Omit it to fall back to ${name === 'accessKey' ? 'KLING_ACCESS_KEY' : 'KLING_SECRET_KEY'}.`,
-      );
-    }
+  // --- resolve the key (after input is known good) --------------------------
+  if (apiKey != null && (typeof apiKey !== 'string' || apiKey.trim() === '')) {
+    throw new MissingKeyError(
+      'An explicit apiKey was passed but is empty or not a string. ' +
+        'Omit it to fall back to KLING_API_KEY.',
+    );
   }
   const keys = {
-    accessKey: accessKey ?? requireEnv('KLING_ACCESS_KEY', ', or pass an explicit accessKey to the call'),
-    secretKey: secretKey ?? requireEnv('KLING_SECRET_KEY', ', or pass an explicit secretKey to the call'),
+    apiKey: apiKey ?? requireEnv('KLING_API_KEY', ', or pass an explicit apiKey to the call'),
   };
 
   // --- abort/timeout plumbing (mirrors generateImage) ----------------------

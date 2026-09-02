@@ -49,7 +49,7 @@ Commands:
   --help, -h           Show this help
   --version, -v        Show version
 
-Keys: GEMINI_API_KEY (required), KLING_ACCESS_KEY + KLING_SECRET_KEY (Kling),
+Keys: GEMINI_API_KEY (required), KLING_API_KEY (Kling),
 OPENAI_API_KEY (gpt-image-1) — all optional except Gemini.
 Run \`altexo-ai-gen init\` to set them up, or see .env.example.
 
@@ -200,12 +200,10 @@ async function runInit(flags) {
     process.exit(1);
   }
 
-  let klingAccess = '';
-  let klingSecret = '';
+  let klingApiKey = '';
   const wantKling = await ask('Add Kling keys now? (y/N) ');
   if (isYes(wantKling)) {
-    klingAccess = await askHidden('Kling access key (https://app.klingai.com/global/dev/account): ');
-    klingSecret = await askHidden('Kling secret key: ');
+    klingApiKey = await askHidden('Kling API key (https://app.klingai.com/global/dev/account): ');
   }
 
   let openai = '';
@@ -214,12 +212,11 @@ async function runInit(flags) {
     openai = await askHidden('OpenAI API key (https://platform.openai.com/api-keys): ');
   }
 
-  writeFileSync(ENV_TARGET, renderEnv({ gemini, klingAccess, klingSecret, openai }));
+  writeFileSync(ENV_TARGET, renderEnv({ gemini, klingApiKey, openai }));
   // Make the keys available to a smoke test in this same process, regardless of
   // clone vs installed mode (don't print the values).
   process.env.GEMINI_API_KEY = gemini;
-  if (klingAccess) process.env.KLING_ACCESS_KEY = klingAccess;
-  if (klingSecret) process.env.KLING_SECRET_KEY = klingSecret;
+  if (klingApiKey) process.env.KLING_API_KEY = klingApiKey;
   if (openai) process.env.OPENAI_API_KEY = openai;
   console.log(`\nWrote ${ENV_TARGET} (keys not echoed).`);
 
@@ -237,7 +234,7 @@ async function runInit(flags) {
   }
 }
 
-function renderEnv({ gemini, klingAccess, klingSecret, openai }) {
+function renderEnv({ gemini, klingApiKey, openai }) {
   const lines = [
     '# Written by `altexo-ai-gen init`. Values in your shell environment override this file.',
     '',
@@ -245,8 +242,7 @@ function renderEnv({ gemini, klingAccess, klingSecret, openai }) {
     `GEMINI_API_KEY=${gemini}`,
     '',
     '# Kling official API (api.klingai.com) — Kling 3 video.',
-    `KLING_ACCESS_KEY=${klingAccess}`,
-    `KLING_SECRET_KEY=${klingSecret}`,
+    `KLING_API_KEY=${klingApiKey}`,
     '',
     '# OpenAI — gpt-image-1 (image).',
     `OPENAI_API_KEY=${openai ?? ''}`,

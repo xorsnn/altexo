@@ -4,6 +4,37 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-09-03
+
+### Changed — BREAKING
+
+- **Kling auth is a single `apiKey` bearer token; the access-key/secret-key JWT path is
+  removed.** Kling supports two schemes and documents the AK/SK pair as **legacy**; the
+  console now issues one API key (`api-key-kling-…`). This package only ever spoke the legacy
+  dialect, so anyone with a current Kling account was asked for a credential shape they could
+  not obtain — the observed failure is a user pasting their API key into an "access key" field,
+  inventing something for "secret key", and getting a 401 that appears to blame the secret.
+
+  `generateVideo({ accessKey, secretKey })` → `generateVideo({ apiKey })`, falling back to
+  **`KLING_API_KEY`** instead of `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`. The key is now sent
+  verbatim as `Authorization: Bearer <key>` — there is no signing step and no 30-minute token
+  to refresh.
+
+  **Upgrade:** replace the two env vars with one, and replace the two call options with one.
+  There is no compatibility shim on purpose: keeping both would mean maintaining a dialect the
+  provider is retiring, and a silent fallback between them is how a wrong-half credential
+  produces a 401 nobody can attribute.
+
+- **`validateKlingKeys({ accessKey, secretKey })` → `validateKlingApiKey({ apiKey })`.** Same
+  three verdicts, same never-throws contract, same unbilled non-mutating GET. It shipped one
+  day ago in 0.8.0 and is renamed rather than deprecated — the pair form could never have
+  validated anything on an account that cannot issue a pair.
+
+### Removed
+
+- **The `jsonwebtoken` dependency**, along with `makeToken` and `TOKEN_TTL_SEC`. Bearer auth
+  needs no signer, so the package now ships with three runtime dependencies instead of four.
+
 ## [0.8.0] - 2026-09-02
 
 ### Added
