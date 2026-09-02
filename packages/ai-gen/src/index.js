@@ -9,7 +9,7 @@
 // mutation (the CLI entry points load .env explicitly via loadLocalEnv).
 
 export { generateImage, saveImages, extractImages } from './nano-banana.js';
-export { generateVideo, saveVideo } from './kling.js';
+export { generateVideo, saveVideo, validateKlingKeys } from './kling.js';
 export { MODELS, priceImage, priceVideo, estimateImageCost, estimateVideoCost } from './models.js';
 export {
   AiGenError,

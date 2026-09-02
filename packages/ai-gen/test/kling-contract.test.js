@@ -13,7 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { generateVideo, saveVideo, submitAndPoll } from '../src/kling.js';
+import { generateVideo, saveVideo, submitAndPoll, validateKlingKeys } from '../src/kling.js';
 import { MODELS, estimateVideoCost } from '../src/models.js';
 import {
   AiGenError,
@@ -303,6 +303,7 @@ test('package root (exports map) exposes generateVideo, saveVideo, estimateVideo
   assert.equal(typeof mod.generateVideo, 'function');
   assert.equal(typeof mod.saveVideo, 'function');
   assert.equal(typeof mod.estimateVideoCost, 'function');
+  assert.equal(typeof mod.validateKlingKeys, 'function');
 });
 
 // --- the deep submitAndPoll helper still works for non-video flows ---------
@@ -314,3 +315,112 @@ test('submitAndPoll still polls to success for the deep callers (elements)', asy
 });
 
 void saveVideo; // exercised by the CLI; included here to assert the export exists
+
+
+// --- validateKlingKeys ----------------------------------------------------
+//
+// The credential probe. Three verdicts, and the split between 'invalid' and
+// 'unavailable' is the whole point: callers demote a stored key on 'invalid', so
+// anything short of the provider actually refusing the credentials must come back
+// 'unavailable' or an outage costs users a key they have to go re-paste.
+
+// A one-shot fake for the probe: answers the single GET with the given status.
+function probeFetch(res) {
+  const calls = [];
+  const impl = async (url, opts = {}) => {
+    if (opts.signal?.aborted) throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError');
+    calls.push({ url, method: opts.method ?? 'GET', headers: opts.headers, redirect: opts.redirect });
+    if (res instanceof Error) throw res;
+    return { ok: (res.status ?? 200) < 400, status: res.status ?? 200 };
+  };
+  impl.calls = calls;
+  return impl;
+}
+
+test('validateKlingKeys: a 200 from the provider is valid', async () => {
+  const r = await validateKlingKeys({ ...KEYS, _fetch: probeFetch({ status: 200 }) });
+  assert.deepEqual(r, { status: 'valid' });
+});
+
+test('validateKlingKeys: 401 and 403 are invalid (the provider refused the pair)', async () => {
+  for (const status of [401, 403]) {
+    const r = await validateKlingKeys({ ...KEYS, _fetch: probeFetch({ status }) });
+    assert.equal(r.status, 'invalid', `expected ${status} to be invalid`);
+    assert.match(r.message, new RegExp(String(status)));
+  }
+});
+
+test('validateKlingKeys: 429 and 5xx are unavailable, NOT invalid', async () => {
+  // Regression guard: demoting a stored key on a provider blip is the expensive
+  // mistake this split exists to prevent.
+  for (const status of [429, 500, 502, 503]) {
+    const r = await validateKlingKeys({ ...KEYS, _fetch: probeFetch({ status }) });
+    assert.equal(r.status, 'unavailable', `expected ${status} to be unavailable`);
+  }
+});
+
+test('validateKlingKeys: a transport failure is unavailable, not invalid', async () => {
+  const r = await validateKlingKeys({ ...KEYS, _fetch: probeFetch(new Error('ECONNREFUSED')) });
+  assert.equal(r.status, 'unavailable');
+});
+
+test('validateKlingKeys: an empty or non-string key is invalid with NO network call', async () => {
+  for (const bad of ['', '   ', undefined, null, 42, {}]) {
+    const f = probeFetch({ status: 200 });
+    const a = await validateKlingKeys({ accessKey: bad, secretKey: 'sk-test', _fetch: f });
+    assert.equal(a.status, 'invalid');
+    const b = await validateKlingKeys({ accessKey: 'ak-test', secretKey: bad, _fetch: f });
+    assert.equal(b.status, 'invalid');
+    assert.equal(f.calls.length, 0, 'must not probe on a structurally bad key');
+  }
+});
+
+test('validateKlingKeys: NEVER throws, whatever the fetch does', async () => {
+  // Total by contract — callers consume the verdict without a try/catch.
+  for (const thrown of [new Error('x'), new TypeError('y'), 'a string', null]) {
+    const r = await validateKlingKeys({ ...KEYS, _fetch: async () => { throw thrown; } });
+    assert.equal(r.status, 'unavailable');
+  }
+});
+
+test('validateKlingKeys: an aborted signal lands as unavailable, not a throw', async () => {
+  const ac = new AbortController();
+  ac.abort();
+  const r = await validateKlingKeys({ ...KEYS, signal: ac.signal, _fetch: probeFetch({ status: 200 }) });
+  assert.equal(r.status, 'unavailable');
+});
+
+test('validateKlingKeys: timeoutMs expiry lands as unavailable', async () => {
+  const hang = async (url, opts = {}) =>
+    new Promise((_res, rej) => {
+      opts.signal?.addEventListener('abort', () => rej(opts.signal.reason), { once: true });
+    });
+  const r = await validateKlingKeys({ ...KEYS, timeoutMs: 20, _fetch: hang });
+  assert.equal(r.status, 'unavailable');
+});
+
+test('validateKlingKeys: probes a bearer-authed, non-mutating GET and refuses redirects', async () => {
+  const f = probeFetch({ status: 200 });
+  await validateKlingKeys({ ...KEYS, _fetch: f });
+  assert.equal(f.calls.length, 1);
+  const [call] = f.calls;
+  assert.equal(call.method, 'GET', 'the probe must never mutate');
+  assert.equal(call.redirect, 'error', 'a redirect could leak the Authorization header');
+  assert.match(call.headers.Authorization, /^Bearer \S+\.\S+\.\S+$/, 'a signed JWT');
+  assert.doesNotMatch(call.url, /ak-test|sk-test/, 'credentials must never ride in the URL');
+});
+
+test('validateKlingKeys: takes NO env fallback (unlike generateVideo)', async () => {
+  // Validating "whatever is in the environment" is not a question anyone means to ask.
+  process.env.KLING_ACCESS_KEY = 'env-access';
+  process.env.KLING_SECRET_KEY = 'env-secret';
+  try {
+    const f = probeFetch({ status: 200 });
+    const r = await validateKlingKeys({ _fetch: f });
+    assert.equal(r.status, 'invalid');
+    assert.equal(f.calls.length, 0);
+  } finally {
+    delete process.env.KLING_ACCESS_KEY;
+    delete process.env.KLING_SECRET_KEY;
+  }
+});

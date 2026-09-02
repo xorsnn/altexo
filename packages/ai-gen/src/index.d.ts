@@ -133,6 +133,39 @@ export interface GenerateVideoResult {
 
 export function generateVideo(options: GenerateVideoOptions): Promise<GenerateVideoResult>;
 
+export interface ValidateKlingKeysOptions {
+  /** Kling access key. Per-call only — there is NO env fallback here. */
+  accessKey: string;
+  /** Kling secret key. Per-call only — there is NO env fallback here. */
+  secretKey: string;
+  /** Cancels the probe. An abort lands as `unavailable`, never as a throw. */
+  signal?: AbortSignal;
+  /** Bound on the probe in ms (default 8000; 0 disables). A timeout lands as
+   * `unavailable`, never as a throw. */
+  timeoutMs?: number;
+}
+
+export type KlingKeyValidation =
+  /** The provider accepted the credentials. */
+  | { status: 'valid' }
+  /** The provider looked at these credentials and refused them (401/403), or they
+   * are structurally unusable. Safe to act on — e.g. to demote a stored key. */
+  | { status: 'invalid'; message: string }
+  /** No verdict: an outage, a timeout, a 429, an abort. NEVER treat as a bad key. */
+  | { status: 'unavailable'; message: string };
+
+/**
+ * Check whether a Kling access+secret pair is live, without submitting a render.
+ *
+ * One cheap authenticated GET against the caller's own task list — non-mutating and
+ * unbilled. NEVER throws: an unusable credential is a verdict, not an exception, so
+ * the result can be consumed without a try/catch. The provider's response body is
+ * never echoed into `message`, so a result is always safe to log.
+ */
+export function validateKlingKeys(
+  options: ValidateKlingKeysOptions
+): Promise<KlingKeyValidation>;
+
 /** Downloads videoUrl to outDir/<prefix>-01.mp4. Returns the written path. */
 export function saveVideo(videoUrl: string, outDir: string, prefix?: string): Promise<string>;
 

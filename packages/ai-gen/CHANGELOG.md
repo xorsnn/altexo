@@ -4,6 +4,34 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-09-02
+
+### Added
+
+- **`validateKlingKeys({ accessKey, secretKey, signal, timeoutMs })`** — check a
+  Kling credential without submitting a render. Kling has no unauthenticated
+  probe (auth is an HS256 JWT over the access+secret pair), so until now the only
+  way to learn whether a stored key still worked was to spend a render and watch
+  it fail. Embedders were left choosing between accepting keys unchecked and
+  reimplementing the signer and base URL themselves; this exports the check
+  instead. One `GET /v1/videos/image2video?pageNum=1&pageSize=1` — non-mutating,
+  unbilled — reusing the same `makeToken` and `BASE_URL` a render uses, so the
+  probe can never drift onto a different host than the thing it is vouching for.
+
+  Returns `{ status: 'valid' }`, `{ status: 'invalid', message }` or
+  `{ status: 'unavailable', message }`. **The invalid/unavailable split is the
+  point:** only `invalid` means the provider looked at the credentials and refused
+  them (401/403). A 429, a 5xx, a timeout or an abort is `unavailable` — callers
+  demote stored keys on this verdict, and demoting during a provider blip costs a
+  user a credential they then have to find and paste again.
+
+  Two deliberate divergences from the `generateVideo` contract, both documented
+  in the source: it **never throws** (an unusable credential is a verdict, not an
+  exception — callers need no try/catch), and it takes **no env fallback**
+  (validating whatever happens to be in the environment is not a question anyone
+  means to ask). Default `timeoutMs` is 8s, not 600s: this bounds an interactive
+  "save my key" click, not a render.
+
 ## [0.7.0] - 2026-06-17
 
 ### Removed

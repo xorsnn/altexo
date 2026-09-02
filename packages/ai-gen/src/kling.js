@@ -112,6 +112,102 @@ export async function submitAndPoll(
   }
 }
 
+/** How long the credential probe may hang before the provider is called unavailable.
+ * Deliberately short: this bounds an interactive "save my key" click, not a render
+ * (generateVideo's own default is 600s because Kling renders take minutes). */
+const PROBE_TIMEOUT_MS = 8000;
+
+/** The cheapest authenticated GET Kling exposes: page 1, size 1 of the caller's own
+ * image2video task list. Non-mutating and unbilled, so it can answer "are these keys
+ * live?" without submitting a render. */
+const PROBE_PATH = '/v1/videos/image2video?pageNum=1&pageSize=1';
+
+// Library contract (stable):
+//   validateKlingKeys({ accessKey, secretKey, signal, timeoutMs })
+//     → { status: 'valid' }
+//     | { status: 'invalid', message }      the provider rejected these credentials
+//     | { status: 'unavailable', message }  the provider could not answer right now
+//
+// WHY THIS EXISTS. Kling has no unauthenticated probe — auth is an HS256 JWT signed
+// over the access+secret pair — so a caller who wants to know whether a stored
+// credential still works has, until now, had only one option: submit a real render and
+// see if it fails. That is a paid, minutes-long way to ask a yes/no question, and it
+// pushed every embedder toward either accepting keys unchecked or reimplementing
+// makeToken() and BASE_URL on their own. Both are worse than exporting the check.
+//
+// WHY IT NEVER THROWS. generateVideo throws MissingKeyError on an empty/non-string key,
+// which is right for a render — the caller asked for work that cannot be done. This
+// function's whole job is to ANSWER a question about a credential, so an unusable one is
+// a verdict ('invalid'), not an exception. Callers can treat the result as total and skip
+// the try/catch. This is the one deliberate divergence from the generateVideo contract.
+//
+// THE THREE-WAY SPLIT IS THE POINT. 'invalid' means the provider looked at these
+// credentials and said no (401/403). 'unavailable' means nobody knows yet — a 5xx, a
+// timeout, a DNS failure, a 429. Callers use this to decide whether to DEMOTE a stored
+// key, and demoting on a provider outage would cost users a credential they would have
+// to go find and paste again. When in doubt this returns 'unavailable', never 'invalid'.
+//
+// - Keys are per-call ONLY. Unlike generateVideo there is no env fallback: validating
+//   "whatever happens to be in the environment" is not a question anyone means to ask,
+//   and silently probing the host's own key would be a confusing answer.
+// - `signal` (AbortSignal) cancels the probe; `timeoutMs` (default 8s, 0 to disable)
+//   bounds it. Neither surfaces as a throw — both land as 'unavailable'.
+// - The provider's response body is never echoed into `message`; only the status code
+//   is, so a probe result is always safe to log.
+// - `_fetch` is a test seam (injects a fake in place of global fetch). Not public API.
+export async function validateKlingKeys({
+  accessKey,
+  secretKey,
+  signal,
+  timeoutMs = PROBE_TIMEOUT_MS,
+  _fetch,
+} = {}) {
+  for (const [name, val] of [['accessKey', accessKey], ['secretKey', secretKey]]) {
+    if (typeof val !== 'string' || val.trim() === '') {
+      return { status: 'invalid', message: `${name} must be a non-empty string` };
+    }
+  }
+
+  let token;
+  try {
+    token = makeToken({ accessKey, secretKey });
+  } catch {
+    // jsonwebtoken rejects a malformed secret (e.g. a key the signer cannot use) before
+    // any network call. That is the credential failing, not the provider — but never
+    // echo the signer's error, which can quote the secret back.
+    return { status: 'invalid', message: 'the key pair could not be used to sign a request' };
+  }
+
+  const timeoutCtrl = timeoutMs > 0 ? new AbortController() : null;
+  const timer = timeoutCtrl ? setTimeout(() => timeoutCtrl.abort(), timeoutMs) : null;
+  const signals = [signal, timeoutCtrl?.signal].filter(Boolean);
+  const probeSignal =
+    signals.length === 0 ? undefined : signals.length === 1 ? signals[0] : AbortSignal.any(signals);
+
+  try {
+    const res = await (_fetch ?? fetch)(`${BASE_URL}${PROBE_PATH}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+      redirect: 'error',
+      signal: probeSignal,
+    });
+    if (res.status === 401 || res.status === 403) {
+      return { status: 'invalid', message: `provider rejected the credentials (${res.status})` };
+    }
+    if (!res.ok) {
+      return { status: 'unavailable', message: `provider returned ${res.status}` };
+    }
+    return { status: 'valid' };
+  } catch {
+    // Abort, timeout, DNS, TLS, refused redirect — every one of them means "no answer",
+    // never "bad key". Swallowed rather than inspected: the error can carry request
+    // context, and no branch here would act on the distinction anyway.
+    return { status: 'unavailable', message: 'the provider could not be reached' };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // Library contract (stable, mirrors generateImage):
 //   generateVideo({ prompt, aspect, duration, imagePath, imageTailPath, model,
 //                   negativePrompt, audio, multiShot, shotType, elementIds,
