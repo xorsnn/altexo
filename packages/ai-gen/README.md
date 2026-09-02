@@ -127,6 +127,30 @@ Cost: `costEstimate` (and the standalone `estimateVideoCost(model, seconds,
 clip per task; run N calls in parallel for N variants. Failures carry the same
 `code`s as `generateImage`; a content-rejected task surfaces as an `AiGenError`.
 
+#### Checking a Kling key without rendering
+
+Kling has no unauthenticated probe — auth is a JWT signed over the access+secret
+pair — so `validateKlingKeys` answers "is this credential live?" with one cheap
+authenticated GET instead of a paid render:
+
+```js
+import { validateKlingKeys } from '@altexo/ai-gen';
+
+const r = await validateKlingKeys({ accessKey, secretKey }); // timeoutMs default 8s
+// { status: 'valid' }
+// { status: 'invalid', message }      the provider refused these credentials
+// { status: 'unavailable', message }  no verdict: outage, 429, timeout, abort
+```
+
+It **never throws** — an unusable credential is a verdict, not an exception, so
+there is no try/catch to write. Keys are per-call only here (no env fallback), and
+the provider's body is never echoed into `message`, so a result is safe to log.
+
+Treat the three-way split as load-bearing: only `invalid` means the provider
+actually refused the pair. If you demote or delete a stored key, do it on
+`invalid` alone — acting on `unavailable` costs a user a working credential
+during a provider blip.
+
 **Next.js embedders:** add `serverExternalPackages: ['@altexo/ai-gen']` to
 `next.config.js`. The model registry is read from a packaged JSON at runtime
 via `import.meta.url`-relative paths, which breaks if the bundler inlines the
@@ -237,6 +261,9 @@ with `audio: true` doubles (2× `audioMultiplier`).
   taxonomy, the stable return shape). See "Video (Kling)" under Library usage.
 - Auth: JWT (HS256) signed from `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`; the
   wrapper mints a fresh 30-min token per call via `jsonwebtoken`.
+- `validateKlingKeys({ accessKey, secretKey })` (0.8.0) probes the same host with
+  the same signer and returns `valid` / `invalid` / `unavailable` — the only way to
+  check a credential without paying for a render.
 - Model IDs are best-guess for Kling 3 — if you get `invalid model_name`, open the
   [Kling dev console](https://app.klingai.com/global/dev), trigger a working
   request, and copy the exact `model_name` from the Network tab into your
