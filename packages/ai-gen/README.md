@@ -114,7 +114,7 @@ const { videoUrl, taskId, costEstimate, durationSeconds } = await generateVideo(
   duration: 5,
   imagePath: '/tmp/head.png',  // head frame (image-to-video); omit for text-to-video
   imageTailPath: '/tmp/tail.png', // optional tail frame — requires imagePath
-  accessKey, secretKey,        // per-call; fall back to KLING_ACCESS_KEY / KLING_SECRET_KEY
+  apiKey,                      // per-call; falls back to KLING_API_KEY
   signal: controller.signal,   // cancels submit, polls, and the file reads
   timeoutMs: 600_000,          // default; 0 disables the bound
 });
@@ -129,21 +129,20 @@ clip per task; run N calls in parallel for N variants. Failures carry the same
 
 #### Checking a Kling key without rendering
 
-Kling has no unauthenticated probe — auth is a JWT signed over the access+secret
-pair — so `validateKlingKeys` answers "is this credential live?" with one cheap
-authenticated GET instead of a paid render:
+Kling has no unauthenticated probe, so `validateKlingApiKey` answers "is this
+credential live?" with one cheap authenticated GET instead of a paid render:
 
 ```js
-import { validateKlingKeys } from '@altexo/ai-gen';
+import { validateKlingApiKey } from '@altexo/ai-gen';
 
-const r = await validateKlingKeys({ accessKey, secretKey }); // timeoutMs default 8s
+const r = await validateKlingApiKey({ apiKey }); // timeoutMs default 8s
 // { status: 'valid' }
 // { status: 'invalid', message }      the provider refused these credentials
 // { status: 'unavailable', message }  no verdict: outage, 429, timeout, abort
 ```
 
 It **never throws** — an unusable credential is a verdict, not an exception, so
-there is no try/catch to write. Keys are per-call only here (no env fallback), and
+there is no try/catch to write. The key is per-call only here (no env fallback), and
 the provider's body is never echoed into `message`, so a result is safe to log.
 
 Treat the three-way split as load-bearing: only `invalid` means the provider
@@ -172,7 +171,7 @@ per call or set the env vars yourself. Values already in your shell environment
 take precedence. Required:
 
 - `GEMINI_API_KEY` — Nano Banana + Veo — <https://aistudio.google.com/apikey>
-- `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` — Kling — <https://app.klingai.com/global/dev/account>
+- `KLING_API_KEY` — Kling — <https://app.klingai.com/global/dev/account>
 - `OPENAI_API_KEY` — gpt-image-1 (optional) — <https://platform.openai.com/api-keys>
 
 See [`.env.example`](.env.example).
@@ -257,13 +256,15 @@ with `audio: true` doubles (2× `audioMultiplier`).
 - Kuaishou's official international API at `https://api.klingai.com`.
 - **On the stable library surface as of 0.6.0** — `generateVideo` /
   `saveVideo` import from the package root and follow the `generateImage`
-  contract (per-call `accessKey`/`secretKey`, `signal`/`timeoutMs`, the error
+  contract (per-call `apiKey`, `signal`/`timeoutMs`, the error
   taxonomy, the stable return shape). See "Video (Kling)" under Library usage.
-- Auth: JWT (HS256) signed from `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`; the
-  wrapper mints a fresh 30-min token per call via `jsonwebtoken`.
-- `validateKlingKeys({ accessKey, secretKey })` (0.8.0) probes the same host with
-  the same signer and returns `valid` / `invalid` / `unavailable` — the only way to
-  check a credential without paying for a render.
+- Auth: a single `KLING_API_KEY`, sent verbatim as `Authorization: Bearer <key>`.
+  Kling documents the older access-key/secret-key JWT pair as legacy and the console
+  issues one API key; **0.9.0 removed the JWT path entirely** (and with it the
+  `jsonwebtoken` dependency).
+- `validateKlingApiKey({ apiKey })` probes the same host with the same credential and
+  returns `valid` / `invalid` / `unavailable` — the only way to check a key without
+  paying for a render.
 - Model IDs are best-guess for Kling 3 — if you get `invalid model_name`, open the
   [Kling dev console](https://app.klingai.com/global/dev), trigger a working
   request, and copy the exact `model_name` from the Network tab into your

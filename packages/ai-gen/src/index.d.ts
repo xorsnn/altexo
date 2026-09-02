@@ -107,10 +107,8 @@ export interface GenerateVideoOptions {
   shotType?: 'customize' | 'intelligence';
   /** ≤3 reference-subject ids from createElement(). */
   elementIds?: string[];
-  /** Per-call Kling access key; falls back to KLING_ACCESS_KEY. */
-  accessKey?: string;
-  /** Per-call Kling secret key; falls back to KLING_SECRET_KEY. */
-  secretKey?: string;
+  /** Per-call Kling API key, sent as the bearer token; falls back to KLING_API_KEY. */
+  apiKey?: string;
   /** Cancels the call; surfaces unwrapped with err.name === 'AbortError'. */
   signal?: AbortSignal;
   /** Bound on the call in ms (default 600000; 0 disables). Expiry surfaces
@@ -133,11 +131,9 @@ export interface GenerateVideoResult {
 
 export function generateVideo(options: GenerateVideoOptions): Promise<GenerateVideoResult>;
 
-export interface ValidateKlingKeysOptions {
-  /** Kling access key. Per-call only — there is NO env fallback here. */
-  accessKey: string;
-  /** Kling secret key. Per-call only — there is NO env fallback here. */
-  secretKey: string;
+export interface ValidateKlingApiKeyOptions {
+  /** The Kling API key to check. Per-call only — there is NO env fallback here. */
+  apiKey: string;
   /** Cancels the probe. An abort lands as `unavailable`, never as a throw. */
   signal?: AbortSignal;
   /** Bound on the probe in ms (default 8000; 0 disables). A timeout lands as
@@ -146,24 +142,24 @@ export interface ValidateKlingKeysOptions {
 }
 
 export type KlingKeyValidation =
-  /** The provider accepted the credentials. */
+  /** The provider accepted the credential. */
   | { status: 'valid' }
-  /** The provider looked at these credentials and refused them (401/403), or they
-   * are structurally unusable. Safe to act on — e.g. to demote a stored key. */
+  /** The provider looked at this credential and refused it (401/403), or it is
+   * structurally unusable. Safe to act on — e.g. to demote a stored key. */
   | { status: 'invalid'; message: string }
   /** No verdict: an outage, a timeout, a 429, an abort. NEVER treat as a bad key. */
   | { status: 'unavailable'; message: string };
 
 /**
- * Check whether a Kling access+secret pair is live, without submitting a render.
+ * Check whether a Kling API key is live, without submitting a render.
  *
  * One cheap authenticated GET against the caller's own task list — non-mutating and
  * unbilled. NEVER throws: an unusable credential is a verdict, not an exception, so
  * the result can be consumed without a try/catch. The provider's response body is
  * never echoed into `message`, so a result is always safe to log.
  */
-export function validateKlingKeys(
-  options: ValidateKlingKeysOptions
+export function validateKlingApiKey(
+  options: ValidateKlingApiKeyOptions
 ): Promise<KlingKeyValidation>;
 
 /** Downloads videoUrl to outDir/<prefix>-01.mp4. Returns the written path. */

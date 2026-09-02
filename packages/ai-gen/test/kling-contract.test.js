@@ -4,8 +4,8 @@
 // generateVideo is hardened to the same contract as generateImage (0.5.0):
 //   - All input is validated BEFORE keys are resolved and before any I/O, so a
 //     bad call reports 'invalid-input', not the host's key situation.
-//   - Per-call accessKey/secretKey fall back to KLING_ACCESS_KEY/KLING_SECRET_KEY;
-//     an explicit empty/non-string value throws MissingKeyError before I/O.
+//   - A per-call apiKey falls back to KLING_API_KEY; an explicit empty/non-string
+//     value throws MissingKeyError before I/O.
 //   - Returns the stable shape { videoUrl, taskId, modelId, costEstimate,
 //     durationSeconds, aspect } — never the raw provider payload.
 //   - Provider failures map onto the taxonomy (rate-limit / missing-key /
@@ -13,7 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { generateVideo, saveVideo, submitAndPoll, validateKlingKeys } from '../src/kling.js';
+import { generateVideo, saveVideo, submitAndPoll, validateKlingApiKey } from '../src/kling.js';
 import { MODELS, estimateVideoCost } from '../src/models.js';
 import {
   AiGenError,
@@ -45,21 +45,19 @@ function fakeFetch({
   return impl;
 }
 
-const KEYS = { accessKey: 'ak-test', secretKey: 'sk-test' };
+const KEYS = { apiKey: 'api-key-kling-test' };
 // Default `_fetch` to a fresh fake so a test can never accidentally hit the real
 // Kling API; an explicit `_fetch` override (to inspect calls) still wins.
 const base = (over = {}) => ({ prompt: 'a lighthouse pans left', model: 'kling-pro', _pollMs: 1, _fetch: fakeFetch(), ...KEYS, ...over });
 
 // Run a block with the Kling env keys guaranteed absent, restoring them after.
 async function withoutKlingKeys(fn) {
-  const saved = { a: process.env.KLING_ACCESS_KEY, s: process.env.KLING_SECRET_KEY };
-  delete process.env.KLING_ACCESS_KEY;
-  delete process.env.KLING_SECRET_KEY;
+  const saved = process.env.KLING_API_KEY;
+  delete process.env.KLING_API_KEY;
   try {
     return await fn();
   } finally {
-    if (saved.a !== undefined) process.env.KLING_ACCESS_KEY = saved.a;
-    if (saved.s !== undefined) process.env.KLING_SECRET_KEY = saved.s;
+    if (saved !== undefined) process.env.KLING_API_KEY = saved;
   }
 }
 
@@ -158,12 +156,12 @@ test('no keys anywhere rejects missing-key (input was valid)', async () => {
   });
 });
 
-test('an explicit empty accessKey throws missing-key before I/O', async () => {
+test('an explicit empty apiKey throws missing-key before I/O', async () => {
   await withoutKlingKeys(async () => {
     const f = fakeFetch();
     await assert.rejects(
-      generateVideo(base({ accessKey: '   ', _fetch: f })),
-      (e) => e instanceof MissingKeyError && /accessKey.*empty/.test(e.message),
+      generateVideo(base({ apiKey: '   ', _fetch: f })),
+      (e) => e instanceof MissingKeyError && /apiKey.*empty/.test(e.message),
     );
     assert.equal(f.calls.length, 0, 'no network call before the key check');
   });
@@ -303,7 +301,7 @@ test('package root (exports map) exposes generateVideo, saveVideo, estimateVideo
   assert.equal(typeof mod.generateVideo, 'function');
   assert.equal(typeof mod.saveVideo, 'function');
   assert.equal(typeof mod.estimateVideoCost, 'function');
-  assert.equal(typeof mod.validateKlingKeys, 'function');
+  assert.equal(typeof mod.validateKlingApiKey, 'function');
 });
 
 // --- the deep submitAndPoll helper still works for non-video flows ---------
@@ -317,11 +315,11 @@ test('submitAndPoll still polls to success for the deep callers (elements)', asy
 void saveVideo; // exercised by the CLI; included here to assert the export exists
 
 
-// --- validateKlingKeys ----------------------------------------------------
+// --- validateKlingApiKey ---------------------------------------------------
 //
 // The credential probe. Three verdicts, and the split between 'invalid' and
 // 'unavailable' is the whole point: callers demote a stored key on 'invalid', so
-// anything short of the provider actually refusing the credentials must come back
+// anything short of the provider actually refusing the credential must come back
 // 'unavailable' or an outage costs users a key they have to go re-paste.
 
 // A one-shot fake for the probe: answers the single GET with the given status.
@@ -337,90 +335,87 @@ function probeFetch(res) {
   return impl;
 }
 
-test('validateKlingKeys: a 200 from the provider is valid', async () => {
-  const r = await validateKlingKeys({ ...KEYS, _fetch: probeFetch({ status: 200 }) });
+test('validateKlingApiKey: a 200 from the provider is valid', async () => {
+  const r = await validateKlingApiKey({ ...KEYS, _fetch: probeFetch({ status: 200 }) });
   assert.deepEqual(r, { status: 'valid' });
 });
 
-test('validateKlingKeys: 401 and 403 are invalid (the provider refused the pair)', async () => {
+test('validateKlingApiKey: 401 and 403 are invalid (the provider refused it)', async () => {
   for (const status of [401, 403]) {
-    const r = await validateKlingKeys({ ...KEYS, _fetch: probeFetch({ status }) });
+    const r = await validateKlingApiKey({ ...KEYS, _fetch: probeFetch({ status }) });
     assert.equal(r.status, 'invalid', `expected ${status} to be invalid`);
     assert.match(r.message, new RegExp(String(status)));
   }
 });
 
-test('validateKlingKeys: 429 and 5xx are unavailable, NOT invalid', async () => {
+test('validateKlingApiKey: 429 and 5xx are unavailable, NOT invalid', async () => {
   // Regression guard: demoting a stored key on a provider blip is the expensive
   // mistake this split exists to prevent.
   for (const status of [429, 500, 502, 503]) {
-    const r = await validateKlingKeys({ ...KEYS, _fetch: probeFetch({ status }) });
+    const r = await validateKlingApiKey({ ...KEYS, _fetch: probeFetch({ status }) });
     assert.equal(r.status, 'unavailable', `expected ${status} to be unavailable`);
   }
 });
 
-test('validateKlingKeys: a transport failure is unavailable, not invalid', async () => {
-  const r = await validateKlingKeys({ ...KEYS, _fetch: probeFetch(new Error('ECONNREFUSED')) });
+test('validateKlingApiKey: a transport failure is unavailable, not invalid', async () => {
+  const r = await validateKlingApiKey({ ...KEYS, _fetch: probeFetch(new Error('ECONNREFUSED')) });
   assert.equal(r.status, 'unavailable');
 });
 
-test('validateKlingKeys: an empty or non-string key is invalid with NO network call', async () => {
+test('validateKlingApiKey: an empty or non-string key is invalid with NO network call', async () => {
+  const f = probeFetch({ status: 200 });
   for (const bad of ['', '   ', undefined, null, 42, {}]) {
-    const f = probeFetch({ status: 200 });
-    const a = await validateKlingKeys({ accessKey: bad, secretKey: 'sk-test', _fetch: f });
-    assert.equal(a.status, 'invalid');
-    const b = await validateKlingKeys({ accessKey: 'ak-test', secretKey: bad, _fetch: f });
-    assert.equal(b.status, 'invalid');
-    assert.equal(f.calls.length, 0, 'must not probe on a structurally bad key');
+    const r = await validateKlingApiKey({ apiKey: bad, _fetch: f });
+    assert.equal(r.status, 'invalid');
   }
+  assert.equal(f.calls.length, 0, 'must not probe on a structurally bad key');
 });
 
-test('validateKlingKeys: NEVER throws, whatever the fetch does', async () => {
+test('validateKlingApiKey: NEVER throws, whatever the fetch does', async () => {
   // Total by contract — callers consume the verdict without a try/catch.
   for (const thrown of [new Error('x'), new TypeError('y'), 'a string', null]) {
-    const r = await validateKlingKeys({ ...KEYS, _fetch: async () => { throw thrown; } });
+    const r = await validateKlingApiKey({ ...KEYS, _fetch: async () => { throw thrown; } });
     assert.equal(r.status, 'unavailable');
   }
 });
 
-test('validateKlingKeys: an aborted signal lands as unavailable, not a throw', async () => {
+test('validateKlingApiKey: an aborted signal lands as unavailable, not a throw', async () => {
   const ac = new AbortController();
   ac.abort();
-  const r = await validateKlingKeys({ ...KEYS, signal: ac.signal, _fetch: probeFetch({ status: 200 }) });
+  const r = await validateKlingApiKey({ ...KEYS, signal: ac.signal, _fetch: probeFetch({ status: 200 }) });
   assert.equal(r.status, 'unavailable');
 });
 
-test('validateKlingKeys: timeoutMs expiry lands as unavailable', async () => {
+test('validateKlingApiKey: timeoutMs expiry lands as unavailable', async () => {
   const hang = async (url, opts = {}) =>
     new Promise((_res, rej) => {
       opts.signal?.addEventListener('abort', () => rej(opts.signal.reason), { once: true });
     });
-  const r = await validateKlingKeys({ ...KEYS, timeoutMs: 20, _fetch: hang });
+  const r = await validateKlingApiKey({ ...KEYS, timeoutMs: 20, _fetch: hang });
   assert.equal(r.status, 'unavailable');
 });
 
-test('validateKlingKeys: probes a bearer-authed, non-mutating GET and refuses redirects', async () => {
+test('validateKlingApiKey: probes a bearer-authed, non-mutating GET and refuses redirects', async () => {
   const f = probeFetch({ status: 200 });
-  await validateKlingKeys({ ...KEYS, _fetch: f });
+  await validateKlingApiKey({ ...KEYS, _fetch: f });
   assert.equal(f.calls.length, 1);
   const [call] = f.calls;
   assert.equal(call.method, 'GET', 'the probe must never mutate');
   assert.equal(call.redirect, 'error', 'a redirect could leak the Authorization header');
-  assert.match(call.headers.Authorization, /^Bearer \S+\.\S+\.\S+$/, 'a signed JWT');
-  assert.doesNotMatch(call.url, /ak-test|sk-test/, 'credentials must never ride in the URL');
+  // The API key IS the token now — sent verbatim, no signing step, nothing to expire.
+  assert.equal(call.headers.Authorization, `Bearer ${KEYS.apiKey}`);
+  assert.doesNotMatch(call.url, /api-key-kling-test/, 'the key must never ride in the URL');
 });
 
-test('validateKlingKeys: takes NO env fallback (unlike generateVideo)', async () => {
+test('validateKlingApiKey: takes NO env fallback (unlike generateVideo)', async () => {
   // Validating "whatever is in the environment" is not a question anyone means to ask.
-  process.env.KLING_ACCESS_KEY = 'env-access';
-  process.env.KLING_SECRET_KEY = 'env-secret';
+  process.env.KLING_API_KEY = 'env-api-key';
   try {
     const f = probeFetch({ status: 200 });
-    const r = await validateKlingKeys({ _fetch: f });
+    const r = await validateKlingApiKey({ _fetch: f });
     assert.equal(r.status, 'invalid');
     assert.equal(f.calls.length, 0);
   } finally {
-    delete process.env.KLING_ACCESS_KEY;
-    delete process.env.KLING_SECRET_KEY;
+    delete process.env.KLING_API_KEY;
   }
 });
