@@ -26,6 +26,7 @@ import {
   MissingKeyError,
   SafetyBlockError,
   RateLimitError,
+  InsufficientBalanceError,
   NetworkError,
   InvalidInputError,
   classifyError,
@@ -188,6 +189,76 @@ test('classifyError maps the taxonomy and falls back to code unknown', () => {
   assert.equal(classifyError(timeout), timeout); // timeouts pass through too
 });
 
+// --- the two 429s (0.10.0) --------------------------------------------------
+//
+// Kling answers HTTP 429 for "slow down" AND for "this account has no money".
+// Fused, every downstream decision is wrong at once: a retry loop hammers an
+// account that cannot pay, and an operator gets paged for someone else's wallet.
+// The split is the whole point of 0.10.0, so it is asserted from both sides.
+
+test('a 429 carrying the balance business code is insufficient-balance, not a throttle', () => {
+  const err = Object.assign(new Error('Kling API 429: Account balance not enough'), {
+    status: 429,
+    providerCode: 1102,
+  });
+  const out = classifyError(err);
+  assert.equal(out.code, 'insufficient-balance');
+  assert.equal(out instanceof InsufficientBalanceError, true);
+  assert.equal(out.cause, err); // the original is kept for the operator
+});
+
+test('an ORDINARY 429 is still rate-limit — the split must not swallow throttling', () => {
+  // The direction that would silently cost money: misread a throttle as arrears
+  // and an embedder stops retrying something that would have succeeded.
+  for (const message of [
+    'Too many requests, QPS limit reached',
+    'concurrency limit exceeded',
+    'rate limit',
+  ]) {
+    const out = classifyError(Object.assign(new Error(message), { status: 429 }));
+    assert.equal(out.code, 'rate-limit', `should stay rate-limit: ${message}`);
+  }
+  // …including one with a business code that is not the balance one.
+  const other = Object.assign(new Error('x'), { status: 429, providerCode: 1303 });
+  assert.equal(classifyError(other).code, 'rate-limit');
+});
+
+test('the message alone is enough, so a renumbering cannot silently re-break it', () => {
+  // The code was inferred from an observed failure plus third-party corroboration,
+  // not read off a vendor spec — exactly the kind of fact that goes stale quietly,
+  // where the failure mode is a paid retry loop nobody notices.
+  const out = classifyError(
+    Object.assign(new Error('Kling API 429: Account balance not enough'), { status: 429 })
+  );
+  assert.equal(out.code, 'insufficient-balance');
+});
+
+test('the business code alone is enough, so a localized message cannot break it', () => {
+  const out = classifyError(
+    Object.assign(new Error('账户余额不足'), { status: 429, providerCode: 1102 })
+  );
+  assert.equal(out.code, 'insufficient-balance');
+});
+
+test('the balance signals are scoped to 429 — they never hijack another status', () => {
+  // A 401 whose body happens to mention a balance is still a dead key, and a 500
+  // is still the provider falling over. Only 429 is ambiguous.
+  const auth = Object.assign(new Error('insufficient balance on a dead key'), { status: 401 });
+  assert.equal(classifyError(auth).code, 'missing-key');
+  const boom = Object.assign(new Error('balance not enough'), { status: 500, providerCode: 1102 });
+  assert.equal(classifyError(boom).code, 'network');
+});
+
+test('insufficient-balance survives the cross-module-instance check', () => {
+  // A linked checkout and a published copy in one process produce two class
+  // identities; KNOWN_CODES is what stops the structural check demoting one to
+  // 'unknown'. A new code that is not in that set fails here and nowhere else.
+  const foreign = Object.assign(new Error('from the other copy'), {
+    code: 'insufficient-balance',
+  });
+  assert.equal(classifyError(foreign), foreign);
+});
+
 // --- extractImages parsing ---------------------------------------------------
 
 test('extractImages: parses inlineData parts, skips text parts, [] on empty', () => {
@@ -208,6 +279,7 @@ test('package root import (exports map) exposes the full library surface', async
     'generateImage', 'saveImages', 'extractImages',
     'MODELS', 'priceImage', 'priceVideo', 'estimateImageCost',
     'AiGenError', 'MissingKeyError', 'SafetyBlockError', 'RateLimitError',
+    'InsufficientBalanceError',
     'NetworkError', 'InvalidInputError', 'classifyError',
   ]) {
     assert.ok(name in api, `missing export: ${name}`);

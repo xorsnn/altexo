@@ -16,6 +16,7 @@ export {
   MissingKeyError,
   SafetyBlockError,
   RateLimitError,
+  InsufficientBalanceError,
   NetworkError,
   InvalidInputError,
   classifyError,

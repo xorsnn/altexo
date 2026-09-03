@@ -4,6 +4,56 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-09-03
+
+### Added
+
+- **`insufficient-balance` — the provider account is out of money, split out of
+  `rate-limit`.** Kling answers **HTTP 429** for two conditions with nothing in
+  common: "you are sending requests too fast" and "this account has no funds and
+  will not render again until somebody pays". They were one code, and one code
+  made every downstream decision wrong at once — an auto-retry loop hammers an
+  account that cannot pay, an alert pages an operator who may not own the wallet,
+  and an embedder cannot tell its user which of the two happened.
+
+  Observed in production: a render failed with `Kling API 429: Account balance not
+  enough`, was classified `rate-limit`, and the embedder went on picking that
+  dead-broke account forever while reporting it as a provider outage. A third
+  party independently hit the same conflation and reached the same conclusion —
+  **the balance check must run BEFORE the rate-limit arm**, because a generic 429
+  arm placed first swallows the balance case whole. `classifyError` now orders
+  them that way, and a test asserts an ordinary throttle still classifies as
+  `rate-limit`.
+
+  New `InsufficientBalanceError` on the package root, and `insufficient-balance`
+  in `AiGenErrorCode`. **Additive** — the six existing codes are untouched, so an
+  embedder switching on them keeps compiling; one switching *exhaustively* gains a
+  case. Never auto-retry this code: a throttle clears itself, this one does not.
+
+- **`err.providerCode` on Kling errors** — the provider's numeric business code,
+  preserved from the JSON body. `api()` already read `json.code` to decide whether
+  to throw and then discarded it, which is exactly why the two 429s were
+  indistinguishable. Named `providerCode`, not `code`, which on an `AiGenError` is
+  the taxonomy string.
+
+### How the balance case is recognized, and how sure we are
+
+Two independent signals, either sufficient, **both scoped to HTTP 429** so nothing
+else can be mistaken for them:
+
+1. `providerCode === 1102`, or
+2. a message matching
+   `/balance not enough|insufficient balance|account arrears|resource pack(age)? (exhausted|used up)/i`.
+
+**The code number is inferred, not read off a vendor spec** — Kling's API reference
+renders client-side and publishes no fetchable error table. `1102` comes from an
+observed production body (`Account balance not enough` at 429) plus third-party
+code that pairs exactly that message with exactly that number. Good evidence, not a
+guarantee — which is why the message pattern stays as a fallback rather than
+trusting the number alone. The failure mode of a silently stale code here is a paid
+retry loop nobody notices. If Kling ever publishes the table, narrow this to the
+code and delete the regex.
+
 ## [0.9.0] - 2026-09-03
 
 ### Changed — BREAKING

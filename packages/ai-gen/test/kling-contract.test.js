@@ -19,6 +19,7 @@ import {
   AiGenError,
   MissingKeyError,
   RateLimitError,
+  InsufficientBalanceError,
   NetworkError,
   InvalidInputError,
 } from '../src/errors.js';
@@ -236,6 +237,33 @@ test('provider 429 → RateLimitError (code rate-limit)', async () => {
   await withoutKlingKeys(async () => {
     const f = fakeFetch({ submit: { ok: false, status: 429, body: { code: 1, message: 'slow down' } } });
     await assert.rejects(generateVideo(base({ _fetch: f })), (e) => e instanceof RateLimitError && e.code === 'rate-limit');
+  });
+});
+
+// The end-to-end version of 0.10.0's split, driven through the real `api()`
+// rather than classifyError alone. This is the path that actually broke: `api()`
+// read `json.code` to decide whether to throw and then DROPPED it, so an account
+// with no money and a momentary throttle reached the embedder identically — and
+// rompix retried the dead-broke one forever while paging an operator who could
+// not fund it. The assertion is that the business code now survives the throw.
+test('a Kling 429 with business code 1102 → InsufficientBalanceError, not RateLimitError', async () => {
+  await withoutKlingKeys(async () => {
+    const f = fakeFetch({
+      submit: {
+        ok: false,
+        status: 429,
+        body: { code: 1102, message: 'Account balance not enough' },
+      },
+    });
+    await assert.rejects(
+      generateVideo(base({ _fetch: f })),
+      (e) =>
+        e instanceof InsufficientBalanceError &&
+        e.code === 'insufficient-balance' &&
+        // The provider's own words survive for the operator; the embedder decides
+        // what a user sees.
+        /Account balance not enough/.test(e.message)
+    );
   });
 });
 
