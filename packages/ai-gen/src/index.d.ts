@@ -6,6 +6,10 @@ export type AiGenErrorCode =
   | 'missing-key'
   | 'safety-block'
   | 'rate-limit'
+  /** The provider ACCOUNT has no funds left (0.10.0). Split out of 'rate-limit'
+   * because Kling answers HTTP 429 for both. Never auto-retry it — a throttle
+   * clears itself, this one only clears when somebody pays. */
+  | 'insufficient-balance'
   | 'network'
   | 'invalid-input'
   | 'unknown';
@@ -23,6 +27,9 @@ export class SafetyBlockError extends AiGenError {
 }
 export class RateLimitError extends AiGenError {
   code: 'rate-limit';
+}
+export class InsufficientBalanceError extends AiGenError {
+  code: 'insufficient-balance';
 }
 export class NetworkError extends AiGenError {
   code: 'network';

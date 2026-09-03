@@ -50,6 +50,14 @@ async function api(method, path, body, { signal, keys, fetchImpl = fetch } = {})
     // of collapsing every provider failure to 'unknown'.
     const err = new Error(`Kling API ${res.status}: ${json.message || text}`);
     err.status = res.status;
+    // …and the BUSINESS code beside it (0.10.0). The status alone cannot separate
+    // Kling's two very different 429s — "you are going too fast" and "this account
+    // has no money" — and this line is the only place the distinguishing value
+    // exists. It was read on the line above purely to decide whether to throw, and
+    // then dropped; classifyError could not tell the two apart, so an account that
+    // would never render again looked exactly like a momentary throttle. Named
+    // `providerCode` and NOT `code`, which on an AiGenError is the taxonomy string.
+    if (typeof json.code === 'number') err.providerCode = json.code;
     throw err;
   }
   return json;
