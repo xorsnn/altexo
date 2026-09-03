@@ -4,6 +4,20 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.10.1] - 2026-09-03
+
+### Fixed
+
+- **README: the taxonomy list was missing `insufficient-balance`**, and described
+  `rate-limit` as *"HTTP 429 — back off"*. After 0.10.0 that is not merely
+  incomplete, it is the wrong advice — a 429 can mean the account has no money, and
+  backing off from that retries forever, which is the exact production failure
+  0.10.0 was written to prevent.
+
+  Shipped as a patch release rather than a docs-only merge on purpose: npm renders
+  the **latest published version's** README on the package page, so the correction
+  reaches readers only once a newer version exists. No code changes.
+
 ## [0.10.0] - 2026-09-03
 
 ### Added

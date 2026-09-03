@@ -83,9 +83,19 @@ The library **throws, never calls `process.exit`** — safe to embed in a server
 `generateImage` failures carry a stable `code` for programmatic handling:
 `missing-key` (no/invalid key), `invalid-input` (unknown model, unreadable
 reference, bad count — deterministic, don't retry unchanged), `safety-block`
-(model returned zero images — rephrase and retry), `rate-limit` (HTTP 429 —
-back off), `network` (transport/5xx — retry), `unknown` (anything else,
-wrapped as `AiGenError`). Caller aborts and timeouts surface unwrapped
+(model returned zero images — rephrase and retry), `rate-limit` (a throttle —
+back off), `insufficient-balance` (the provider ACCOUNT is out of funds —
+**never** auto-retry; only a payment clears it), `network` (transport/5xx —
+retry), `unknown` (anything else, wrapped as `AiGenError`).
+
+**HTTP 429 is not one condition.** Kling returns it both for "you are going too
+fast" and for "this account has no money left", which is why those are two codes
+since 0.10.0 rather than one. Treating them alike means an auto-retry loop
+hammering an account that cannot pay — and, on the other side, an alert that
+pages whoever owns the deploy for a wallet they may not control. If you switch on
+`code`, give `insufficient-balance` its own branch.
+
+Caller aborts and timeouts surface unwrapped
 (`err.name === 'AbortError' | 'TimeoutError'`) — the library recovers the
 distinction even though the underlying SDK drops abort reasons.
 
