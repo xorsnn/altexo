@@ -20,7 +20,7 @@ if (!name || imgs.length === 0) {
 const imagePaths = imgs.map(p => resolve(process.cwd(), p));
 console.log(`[element] creating "${name}" from ${imagePaths.length} reference image(s)...`);
 const t0 = Date.now();
-const { elementId } = await createElement({ name, imagePaths });
+const { elementId } = await createElement({ name, imagePaths, log: true });
 const elapsed = Number(((Date.now() - t0) / 1000).toFixed(1));
 
 console.log(`[element] created in ${elapsed}s → element_id: ${elementId}`);

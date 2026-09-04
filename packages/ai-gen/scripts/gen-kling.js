@@ -45,7 +45,7 @@ const elementIds = [...(yaml.element_ids || [])];
 if (Array.isArray(yaml.elements)) {
   for (const el of yaml.elements) {
     const elImgs = (el.images || []).map(p => resolve(process.cwd(), p));
-    const { elementId } = await createElement({ name: el.name, description: el.description, type: el.type, imagePaths: elImgs, model });
+    const { elementId } = await createElement({ name: el.name, description: el.description, type: el.type, imagePaths: elImgs, model, log: true });
     console.log(`[${slug}] created element "${el.name || ''}" → ${elementId}`);
     elementIds.push(elementId);
   }

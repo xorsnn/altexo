@@ -10,6 +10,7 @@
 
 export { generateImage, saveImages, extractImages } from './nano-banana.js';
 export { generateVideo, saveVideo, validateKlingApiKey } from './kling.js';
+export { createElement } from './kling-elements.js';
 export { MODELS, priceImage, priceVideo, estimateImageCost, estimateVideoCost } from './models.js';
 export {
   AiGenError,

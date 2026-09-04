@@ -138,6 +138,55 @@ export interface GenerateVideoResult {
 
 export function generateVideo(options: GenerateVideoOptions): Promise<GenerateVideoResult>;
 
+/**
+ * A Kling reference subject ("element") — a character or object the video model holds
+ * consistent across a clip. Built once, then passed to `generateVideo({ elementIds })` and
+ * referenced positionally in the prompt as `<<<element_1>>>`.
+ */
+export interface CreateElementOptions {
+  /** Element name, truncated to Kling's 20-char limit. Defaults to 'element'. */
+  name?: string;
+  /** Description, truncated to 100 chars. Defaults to `name`. */
+  description?: string;
+  /** Reference images read from disk. First is the frontal; the rest are other angles. */
+  imagePaths?: string[];
+  /** Reference sources already base64-encoded (or hosted URLs), same order rule. */
+  imageUrls?: string[];
+  /** 'image' (default) builds from stills; 'video' builds from 3-8s reference clips. */
+  type?: 'image' | 'video';
+  /** Kling video model alias from MODELS (default 'kling-pro'). */
+  model?: string;
+  /**
+   * Per-call Kling API key; falls back to KLING_API_KEY. An element exists only inside the
+   * account that created it, so a caller rendering under more than one credential must pass
+   * the same key here that it will pass to generateVideo.
+   */
+  apiKey?: string;
+  /** Cancels the build INCLUDING the reference reads; surfaces unwrapped as 'AbortError'. */
+  signal?: AbortSignal;
+  /** Bound in ms (default 600000; 0 disables). Expiry surfaces unwrapped as 'TimeoutError'. */
+  timeoutMs?: number;
+  /** Print the submit/poll notice (default false — library calls are quiet). */
+  log?: boolean;
+}
+
+export interface CreateElementResult {
+  /** Pass to generateVideo({ elementIds: [elementId] }). Account-scoped: it resolves under
+   * the key that created it and nowhere else. */
+  elementId: string;
+  /** Provider task id for the create-and-poll job. */
+  taskId: string;
+  /** The raw provider task result. */
+  raw: unknown;
+}
+
+/**
+ * Register a reference subject with Kling. An image element needs a frontal image plus 1-3
+ * more (2-4 total); a video element takes reference clips. All input is validated before the
+ * key is resolved and before any file is read.
+ */
+export function createElement(options: CreateElementOptions): Promise<CreateElementResult>;
+
 export interface ValidateKlingApiKeyOptions {
   /** The Kling API key to check. Per-call only — there is NO env fallback here. */
   apiKey: string;
