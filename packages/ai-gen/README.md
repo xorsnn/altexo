@@ -295,7 +295,9 @@ with `audio: true` doubles (2× `audioMultiplier`).
   clip. Build a reusable element with `node scripts/gen-kling-element.js <name> <frontal.png>
   <refer1.png> [refer2 ...]` (a frontal + 1–3 refer images), or inline via `elements: [{name,
   description, images}]`; then reference it in the prompt as `<<<element_1>>>` (max 3). lib:
-  `createElement()` + `generateVideo({ elementIds })`.
+  `createElement({ imagePaths, apiKey })` + `generateVideo({ elementIds, apiKey })` — pass the
+  **same** key to both: an element lives inside one Kling account and its id resolves nowhere
+  else, so a caller working across two credentials builds one element per account.
 - Base URL override: `KLING_BASE_URL` (the international host moved to
   `api-singapore.klingai.com`; the default `api.klingai.com` still resolves).
 - Rate limits are stricter than Google's; keep calls sequential.

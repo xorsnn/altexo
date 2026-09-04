@@ -4,6 +4,48 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-09-04
+
+### Added
+
+- **`createElement` joins the public library surface, with a per-call `apiKey`.** The README
+  has advertised it under *"lib: `createElement()` + `generateVideo({ elementIds })`"* since
+  0.4.0, and that half of the sentence was not true: `createElement` was exported from
+  `src/kling-elements.js` and from nowhere else, while `package.json` `exports` allows only
+  `"."` — so `import { createElement } from '@altexo/ai-gen'` failed and the deep path was
+  refused by Node's own resolver. Only this package's CLI scripts could reach it. An embedder
+  could therefore *use* a reference subject (`generateVideo({ elementIds })`, public and
+  typed since 0.4.0) but had no way to *create* one.
+
+  The blocking half is the **per-call `apiKey`**, which the function never had. An element is
+  registered inside a Kling **account** and its `element_id` resolves under that credential
+  and no other. Any caller that renders across two keys — a service covering one render with
+  its own and the next with a user's — must be able to say which account an element is built
+  in. Without it the export alone would still be unusable for that case.
+
+### Changed
+
+- **`createElement` is hardened to `generateVideo`'s contract**, which is what joining the
+  surface requires (0.10.0 said the off-surface functions "await the same hardening pass"):
+  - **All input validated before keys are resolved and before any I/O.** It previously read
+    every `imagePaths` entry off disk and *then* counted them, so an over-long list paid for
+    the reads before being refused; on a host with no `KLING_API_KEY` a malformed call also
+    reported the key situation instead of its own problem. Counts now come from the inputs.
+  - **`InvalidInputError`** (code `invalid-input`) in place of bare `Error`, an unreadable
+    reference image included; provider failures map through `classifyError` onto the taxonomy.
+  - **`signal` / `timeoutMs`**, bounding the reference reads and the poll wait alike. Aborts
+    and timeouts surface unwrapped (`AbortError` / `TimeoutError`).
+  - **Quiet by default** (`log: false`), like every other library entry point. The two CLI
+    scripts now pass `log: true` explicitly, so their submit notice is unchanged.
+- `CreateElementOptions` and `CreateElementResult` are declared in `src/index.d.ts`.
+
+### Notes
+
+- No behavior change for existing CLI users: `npm run element` and `elements:` in a Kling YAML
+  work exactly as before.
+- **Still off the surface:** Veo (`veo.js`) and the OpenAI image generator
+  (`openai-image.js`). They await the same hardening pass.
+
 ## [0.10.1] - 2026-09-03
 
 ### Fixed

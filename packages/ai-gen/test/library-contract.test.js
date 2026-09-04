@@ -277,6 +277,7 @@ test('package root import (exports map) exposes the full library surface', async
   const api = await import('@altexo/ai-gen'); // self-reference via package.json exports
   for (const name of [
     'generateImage', 'saveImages', 'extractImages',
+    'generateVideo', 'saveVideo', 'validateKlingApiKey', 'createElement',
     'MODELS', 'priceImage', 'priceVideo', 'estimateImageCost',
     'AiGenError', 'MissingKeyError', 'SafetyBlockError', 'RateLimitError',
     'InsufficientBalanceError',
@@ -285,6 +286,7 @@ test('package root import (exports map) exposes the full library surface', async
     assert.ok(name in api, `missing export: ${name}`);
   }
   assert.equal(typeof api.generateImage, 'function');
+  assert.equal(typeof api.createElement, 'function');
   assert.ok(api.MODELS['nano-banana']);
 });
 
