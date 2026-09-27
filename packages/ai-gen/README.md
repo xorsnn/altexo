@@ -122,6 +122,8 @@ const { videoUrl, taskId, costEstimate, durationSeconds } = await generateVideo(
   prompt: 'slow push-in on the lighthouse, fog rolling',
   model: 'kling-pro',          // verified 3–15s tier; default is 'kling-std'
   duration: 5,
+  resolution: '720p',          // optional. 720p→mode std, 1080p→pro, 4k→4k.
+                               // omit it and kling-pro still sends mode=pro
   imagePath: '/tmp/head.png',  // head frame (image-to-video); omit for text-to-video
   imageTailPath: '/tmp/tail.png', // optional tail frame — requires imagePath
   apiKey,                      // per-call; falls back to KLING_API_KEY
@@ -133,7 +135,10 @@ await saveVideo(videoUrl, '/tmp/out'); // downloads to /tmp/out/video-01.mp4
 
 `taskId` is the provider task id — record it to observe or resume a render.
 Cost: `costEstimate` (and the standalone `estimateVideoCost(model, seconds,
-{ audio })`) is `priceVideo` × the model's audio multiplier. Kling renders one
+{ audio, resolution })`) is `priceVideo` × the model's audio multiplier. Pass
+`resolution` and the per-second rate is that size (`kling-pro`: 720p $0.084,
+1080p $0.112, 4k $0.42). Omit it and the flat `perSecond` rate is used, which
+is what existing callers are priced against. Kling renders one
 clip per task; run N calls in parallel for N variants. Failures carry the same
 `code`s as `generateImage`; a content-rejected task surfaces as an `AiGenError`.
 

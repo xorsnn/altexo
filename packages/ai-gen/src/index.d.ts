@@ -99,6 +99,13 @@ export interface GenerateVideoOptions {
   aspect?: string;
   /** Clip length in seconds (default 5). Validated against the model's allowed `durations`. */
   duration?: number;
+  /**
+   * Output size. On Kling's legacy body this IS `mode`: `720p` → `std`,
+   * `1080p` → `pro`, `4k` → `4k`. Omitted keeps the model's configured mode
+   * (kling-pro still sends `pro`). A size the model does not list is
+   * `invalid-input` before any request.
+   */
+  resolution?: '720p' | '1080p' | '4k';
   /** Head frame for image-to-video; omit for text-to-video. Server-trusted path. */
   imagePath?: string | null;
   /** Tail frame; requires `imagePath`. Server-trusted path. */
@@ -231,10 +238,10 @@ export interface ModelEntry {
 
 export const MODELS: Record<string, ModelEntry>;
 export function priceImage(model: string, resolution?: string): number | null;
-export function priceVideo(model: string, seconds: number): number | null;
+export function priceVideo(model: string, seconds: number, resolution?: string): number | null;
 export function estimateImageCost(model: string, count: number, resolution?: string): number;
 export function estimateVideoCost(
   model: string,
   seconds: number,
-  opts?: { audio?: boolean }
+  opts?: { audio?: boolean; resolution?: string }
 ): number;

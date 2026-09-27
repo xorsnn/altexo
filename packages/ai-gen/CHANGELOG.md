@@ -4,6 +4,21 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-09-27
+
+### Added
+
+- **`generateVideo({ resolution })` selects Kling's output size.** On the legacy
+  image-to-video body, `mode` is that size: `720p` sends `std`, `1080p` sends
+  `pro`, `4k` sends `4k`. Omitting `resolution` is unchanged — `kling-pro` still
+  sends `mode: "pro"` and is still estimated at the flat $0.084/s. A size the
+  model does not list (`kling-std` is 720p only) is `invalid-input` before the
+  key is read and before any frame is read.
+- Per-size rates on `kling-pro`: 720p $0.084/s, 1080p $0.112/s, 4k $0.42/s
+  (official Kling 3.0, silent). `priceVideo(model, seconds, resolution)` and
+  `estimateVideoCost(..., { resolution })` read them. The flat `perSecond`
+  figure remains the price when no resolution is passed.
+
 ## [0.11.0] - 2026-09-04
 
 ### Added
