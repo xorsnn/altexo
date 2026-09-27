@@ -60,12 +60,20 @@ test('video pricing — all video models bill per-second (Kling 3 over 3-15s)', 
   approx(priceVideo('kling-pro', 7), 0.588);  // any 3-15s length now prices linearly
   approx(priceVideo('kling-pro', 15), 1.26);
   approx(priceVideo('kling-std', 5), 0.21);
+  // Named sizes. Omitting resolution stays on the flat per-second rate above.
+  approx(priceVideo('kling-pro', 5, '720p'), 0.42);
+  approx(priceVideo('kling-pro', 5, '1080p'), 0.56); // $0.112/s
+  approx(priceVideo('kling-pro', 15, '4k'), 6.3);    // $0.42/s × 15
+  approx(priceVideo('kling-std', 5, '720p'), 0.21);
+  assert.equal(priceVideo('kling-std', 5, '1080p'), null); // std has no 1080p price
 });
 
 test('estimateVideoCost rounds, applies the audio multiplier, zeroes unknowns', () => {
   approx(estimateVideoCost('kling-pro', 5), 0.42);                       // silent
   approx(estimateVideoCost('kling-pro', 5, { audio: true }), 0.84);      // ×2 audio multiplier
   approx(estimateVideoCost('kling-std', 5, { audio: true }), 0.21);      // no multiplier declared → ×1
+  approx(estimateVideoCost('kling-pro', 5, { resolution: '4k' }), 2.1);  // $0.42/s × 5
+  approx(estimateVideoCost('kling-pro', 10, { resolution: '1080p' }), 1.12);
   assert.equal(estimateVideoCost('does-not-exist', 5), 0);              // unknown → 0, like estimateImageCost
 });
 

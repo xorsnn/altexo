@@ -18,6 +18,13 @@ const MAX_WAIT_MS = 10 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = MAX_WAIT_MS; // Kling renders take minutes; bound it like generateImage.
 const MAX_SHOTS = 6; // Kling v3 multi-shot caps at 6 segments per the official examples.
 
+// On the legacy /v1/videos/* body, `mode` is the output size, not a second
+// quality axis beside it: std renders 720p, pro renders 1080p, 4k renders 4K.
+// Callers that pass `resolution` select that size. Callers that omit it keep
+// the model's configured mode (kling-pro still sends mode=pro).
+const RESOLUTION_TO_MODE = { '720p': 'std', '1080p': 'pro', '4k': '4k' };
+const VIDEO_RESOLUTIONS = Object.keys(RESOLUTION_TO_MODE);
+
 // Resolve the bearer credential. Kling's API key IS the token: it is sent as-is, with no
 // signing step and no expiry to manage. Per-call so an embedder can pass a specific owner's
 // key; omitted falls back to the env, preserving the CLI/deep-caller path.
@@ -201,8 +208,8 @@ export async function validateKlingApiKey({
 }
 
 // Library contract (stable, mirrors generateImage):
-//   generateVideo({ prompt, aspect, duration, imagePath, imageTailPath, model,
-//                   negativePrompt, audio, multiShot, shotType, elementIds,
+//   generateVideo({ prompt, aspect, duration, resolution, imagePath, imageTailPath,
+//                   model, negativePrompt, audio, multiShot, shotType, elementIds,
 //                   apiKey, signal, timeoutMs })
 //     → { videoUrl, taskId, modelId, costEstimate, durationSeconds, aspect }
 //
@@ -223,6 +230,7 @@ export async function generateVideo({
   prompt,
   aspect = '9:16',
   duration = 5,
+  resolution,
   imagePath = null,
   imageTailPath = null,
   model = 'kling-std',
@@ -293,6 +301,24 @@ export async function generateVideo({
   if (Array.isArray(m.durations) && !m.durations.includes(totalSeconds)) {
     throw new InvalidInputError(`Kling model ${model} supports ${multiShot ? 'total ' : ''}durations ${m.durations.join('/')}s (got ${totalSeconds}s).`);
   }
+  // Resolution is validated with the other inputs, before the key and before
+  // any frame read. An unknown size, or one this model does not price, never
+  // becomes a request — Kling would otherwise bill a size we did not price.
+  if (resolution !== undefined) {
+    if (typeof resolution !== 'string' || !VIDEO_RESOLUTIONS.includes(resolution)) {
+      throw new InvalidInputError(
+        `resolution must be one of ${VIDEO_RESOLUTIONS.join(', ')} (got ${String(resolution)})`,
+      );
+    }
+    if (Array.isArray(m.resolutions) && !m.resolutions.includes(resolution)) {
+      throw new InvalidInputError(
+        `Kling model ${model} supports resolutions ${m.resolutions.join('/')} (got ${resolution})`,
+      );
+    }
+    if (typeof m.pricing?.[resolution] !== 'number') {
+      throw new InvalidInputError(`Kling model ${model} has no price for resolution ${resolution}`);
+    }
+  }
 
   const isImage = !!imagePath;
   const isHeadTail = !!imageTailPath;
@@ -334,7 +360,10 @@ export async function generateVideo({
       aspect_ratio: aspect,
       cfg_scale: 0.5,
     };
-    if (m.mode) payload.mode = m.mode;
+    // A passed resolution replaces the model's mode. 720p is `std`, 1080p is
+    // `pro`, 4k is `4k`. Omitting resolution keeps the configured mode.
+    if (resolution !== undefined) payload.mode = RESOLUTION_TO_MODE[resolution];
+    else if (m.mode) payload.mode = m.mode;
     if (negativePrompt) payload.negative_prompt = negativePrompt;
     if (shots) {
       // Official multi-shot fields: a single top-level duration (the sum) plus the
@@ -393,7 +422,7 @@ export async function generateVideo({
       videoUrl: videos[0].url,
       taskId,
       modelId: m.id,
-      costEstimate: estimateVideoCost(model, totalSeconds, { audio }),
+      costEstimate: estimateVideoCost(model, totalSeconds, { audio, resolution }),
       durationSeconds: totalSeconds,
       aspect,
     };

@@ -46,9 +46,16 @@ export function priceImage(model, resolution = '2K') {
   return m.pricing[resolution] ?? null;
 }
 
-export function priceVideo(model, seconds) {
+export function priceVideo(model, seconds, resolution) {
   const m = MODELS[model];
   if (!m) return null;
+  // A named output size bills that tier. Omitted keeps the flat per-second
+  // rate, which is what every caller from before resolutions priced against.
+  if (resolution != null) {
+    const unit = m.pricing[resolution];
+    if (typeof unit !== 'number') return null;
+    return unit * seconds;
+  }
   if (m.pricing.perSecond != null) return m.pricing.perSecond * seconds;
   return m.pricing[seconds] ?? null;
 }
@@ -64,8 +71,8 @@ export function estimateImageCost(model, count, resolution = '2K') {
 // The video analog — used by generateVideo's costEstimate and the Kling CLI
 // manifest. Native audio bills at the model's `audioMultiplier` (pro tier);
 // a model without one declared is never charged the multiplier.
-export function estimateVideoCost(model, seconds, { audio = false } = {}) {
-  const base = priceVideo(model, seconds) ?? 0;
+export function estimateVideoCost(model, seconds, { audio = false, resolution } = {}) {
+  const base = priceVideo(model, seconds, resolution) ?? 0;
   const multiplier = audio ? (MODELS[model]?.audioMultiplier ?? 1) : 1;
   return Number((base * multiplier).toFixed(3));
 }

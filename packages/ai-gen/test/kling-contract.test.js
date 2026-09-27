@@ -213,6 +213,48 @@ test('a head frame routes to image2video and base64-encodes the file', async () 
   });
 });
 
+test('resolution selects mode and the tier price; an omitted resolution keeps mode=pro', async () => {
+  await withoutKlingKeys(async () => {
+    const omitted = fakeFetch();
+    await generateVideo(base({ _fetch: omitted }));
+    assert.equal(JSON.parse(omitted.calls[0].body).mode, 'pro');
+
+    const p720 = fakeFetch();
+    const at720 = await generateVideo(base({ resolution: '720p', duration: 5, _fetch: p720 }));
+    assert.equal(JSON.parse(p720.calls[0].body).mode, 'std');
+    assert.equal(at720.costEstimate, estimateVideoCost('kling-pro', 5, { resolution: '720p' }));
+
+    const p1080 = fakeFetch();
+    const at1080 = await generateVideo(base({ resolution: '1080p', duration: 5, _fetch: p1080 }));
+    assert.equal(JSON.parse(p1080.calls[0].body).mode, 'pro');
+    assert.equal(at1080.costEstimate, estimateVideoCost('kling-pro', 5, { resolution: '1080p' }));
+
+    const p4k = fakeFetch();
+    const at4k = await generateVideo(base({ resolution: '4k', duration: 5, _fetch: p4k }));
+    assert.equal(JSON.parse(p4k.calls[0].body).mode, '4k');
+    assert.equal(at4k.costEstimate, 2.1);
+  });
+});
+
+test('std refuses 1080p and 4k before any request; an unknown size is invalid-input', async () => {
+  await withoutKlingKeys(async () => {
+    const f = fakeFetch();
+    await assert.rejects(
+      generateVideo(base({ model: 'kling-std', resolution: '1080p', _fetch: f })),
+      (e) => e instanceof InvalidInputError && /resolutions/.test(e.message),
+    );
+    await assert.rejects(
+      generateVideo(base({ model: 'kling-std', resolution: '4k', _fetch: f })),
+      (e) => e instanceof InvalidInputError && /resolutions/.test(e.message),
+    );
+    await assert.rejects(
+      generateVideo(base({ resolution: '2K', _fetch: f })),
+      (e) => e instanceof InvalidInputError && /resolution must be one of/.test(e.message),
+    );
+    assert.equal(f.calls.length, 0);
+  });
+});
+
 test('an unreadable head frame is invalid-input, not raw ENOENT', async () => {
   await withoutKlingKeys(async () => {
     await assert.rejects(
