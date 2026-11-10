@@ -242,6 +242,7 @@ export async function generateVideo({
   apiKey,
   signal,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  fetch: fetchImpl,
   _fetch,
   _pollMs,
 }) {
@@ -256,6 +257,9 @@ export async function generateVideo({
     throw new InvalidInputError(
       `Model alias '${model}' is not a Kling video model — generateVideo only accepts Kling video models`,
     );
+  }
+  if (fetchImpl !== undefined && typeof fetchImpl !== 'function') {
+    throw new InvalidInputError('fetch must be a function when provided');
   }
   if (signal !== undefined && !(signal instanceof AbortSignal)) {
     throw new InvalidInputError('signal must be an AbortSignal');
@@ -411,7 +415,7 @@ export async function generateVideo({
       label: 'kling',
       signal: abortSignal,
       keys,
-      fetchImpl: _fetch ?? fetch,
+      fetchImpl: _fetch ?? fetchImpl ?? globalThis.fetch,
       log: false,
       ...(_pollMs != null ? { pollMs: _pollMs } : {}),
     });
@@ -440,8 +444,11 @@ export async function generateVideo({
   }
 }
 
-export async function saveVideo(videoUrl, outDir, prefix = 'video') {
+export async function saveVideo(videoUrl, outDir, prefix = 'video', { fetch: fetchImpl } = {}) {
+  if (fetchImpl !== undefined && typeof fetchImpl !== 'function') {
+    throw new InvalidInputError('fetch must be a function when provided');
+  }
   const path = `${outDir}/${prefix}-01.mp4`;
-  await downloadToFile(videoUrl, path);
+  await downloadToFile(videoUrl, path, fetchImpl);
   return path;
 }

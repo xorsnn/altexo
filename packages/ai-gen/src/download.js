@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 
-export async function downloadToFile(url, destPath) {
-  const res = await fetch(url);
+export async function downloadToFile(url, destPath, fetchImpl = globalThis.fetch) {
+  const res = await fetchImpl(url);
   if (!res.ok) {
     throw new Error(`Download failed (${res.status} ${res.statusText}) for ${url}`);
   }
