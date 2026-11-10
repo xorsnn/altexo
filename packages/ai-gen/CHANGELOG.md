@@ -4,6 +4,18 @@ All notable changes to `@altexo/ai-gen` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this package adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-11-11
+
+### Added
+
+- Public per-call `fetch` transport options on `generateVideo` and `createElement`
+  cover submission and every poll. `saveVideo` accepts a fourth options argument
+  with `fetch` for the media download. Embedders can build recording/replay without
+  global fetch interception or private test hooks; omitted options preserve the
+  existing transport and all Kling model behavior. Invalid supplied transports are
+  refused before credentials or file I/O. The transport receives sensitive raw
+  data, so callers own sanitization and recording persistence.
+
 ## [0.12.0] - 2026-09-27
 
 ### Added

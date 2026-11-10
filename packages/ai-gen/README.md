@@ -142,6 +142,41 @@ is what existing callers are priced against. Kling renders one
 clip per task; run N calls in parallel for N variants. Failures carry the same
 `code`s as `generateImage`; a content-rejected task surfaces as an `AiGenError`.
 
+#### Per-call HTTP transport for recording and replay
+
+`generateVideo({ fetch })` and `createElement({ fetch })` accept a Fetch-compatible
+function for submission and **every** poll. `saveVideo(url, outDir, prefix,
+{ fetch })` accepts the same option for the CDN download. Omission uses
+`globalThis.fetch`; concurrent calls can use independent transports. Invalid
+supplied transports are `invalid-input` before credentials or file I/O.
+
+```js
+const transport = async (input, init) => {
+  const response = await fetch(input, init);
+  // Inspect response.clone() to preserve the body the library will consume.
+  // Send sanitized metadata/body copies to your own recorder here.
+  return response;
+};
+
+const result = await generateVideo({ prompt, apiKey, fetch: transport });
+await saveVideo(result.videoUrl, outDir, 'clip', { fetch: transport });
+// Pass fetch: transport to createElement too when recording Character creation.
+```
+
+This is a transport API, not a recorder or an automatically sanitized fixture.
+It receives authorization headers, input images/prompts, task IDs and potentially
+signed media URLs. Keep credentials out of persisted fixtures; sanitize headers,
+payloads and URLs before writing to private storage. Capture the downloaded media
+bytes as well as JSON exchanges for complete offline replay. `costEstimate`
+remains an estimate; retain provider deduction evidence separately when measuring
+actual spend. A replay transport must answer every request from its fixtures and
+reject unrecorded requests instead of falling back to the network.
+
+Polling delays, cancellation and timeouts remain unchanged, including during
+replay. Test-runner clock controls can avoid waiting in offline tests. A recording
+transport's own errors are observable by the caller; recording code must handle
+its persistence failures without discarding an accepted paid task's response.
+
 #### Checking a Kling key without rendering
 
 Kling has no unauthenticated probe, so `validateKlingApiKey` answers "is this

@@ -57,6 +57,7 @@ export async function createElement({
   signal,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   log = false,
+  fetch: fetchImpl,
   _fetch,
   _pollMs,
 } = {}) {
@@ -71,6 +72,9 @@ export async function createElement({
     throw new InvalidInputError(
       `Model alias '${model}' is not a Kling video model — createElement only accepts Kling video models`,
     );
+  }
+  if (fetchImpl !== undefined && typeof fetchImpl !== 'function') {
+    throw new InvalidInputError('fetch must be a function when provided');
   }
   if (type !== 'image' && type !== 'video') {
     throw new InvalidInputError(`createElement: type must be 'image' or 'video', got: ${type}`);
@@ -163,7 +167,7 @@ export async function createElement({
       label: 'kling-element',
       signal: abortSignal,
       keys,
-      fetchImpl: _fetch,
+      fetchImpl: _fetch ?? fetchImpl ?? globalThis.fetch,
       log,
       pollMs: _pollMs,
     });

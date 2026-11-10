@@ -128,6 +128,9 @@ export interface GenerateVideoOptions {
   /** Bound on the call in ms (default 600000; 0 disables). Expiry surfaces
    * unwrapped with err.name === 'TimeoutError'. */
   timeoutMs?: number;
+  /** Per-call HTTP transport for submit and every poll (default globalThis.fetch).
+   * Receives credentials and raw provider data; sanitize before recording. */
+  fetch?: typeof globalThis.fetch;
 }
 
 export interface GenerateVideoResult {
@@ -175,6 +178,9 @@ export interface CreateElementOptions {
   timeoutMs?: number;
   /** Print the submit/poll notice (default false — library calls are quiet). */
   log?: boolean;
+  /** Per-call HTTP transport for submit and every poll (default globalThis.fetch).
+   * Receives credentials and raw provider data; sanitize before recording. */
+  fetch?: typeof globalThis.fetch;
 }
 
 export interface CreateElementResult {
@@ -225,8 +231,15 @@ export function validateKlingApiKey(
   options: ValidateKlingApiKeyOptions
 ): Promise<KlingKeyValidation>;
 
+export interface SaveVideoOptions {
+  /** Per-call download transport (default globalThis.fetch). */
+  fetch?: typeof globalThis.fetch;
+}
+
 /** Downloads videoUrl to outDir/<prefix>-01.mp4. Returns the written path. */
-export function saveVideo(videoUrl: string, outDir: string, prefix?: string): Promise<string>;
+export function saveVideo(
+  videoUrl: string, outDir: string, prefix?: string, options?: SaveVideoOptions
+): Promise<string>;
 
 export interface ModelEntry {
   id: string;
